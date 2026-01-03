@@ -1,6 +1,6 @@
 [package]
 name = "lao-cli"
-version = "0.1.0"
+version = "0.1.20"
 edition = "2021"
 description = "Command-line interface for LAO - Local AI Orchestrator"
 authors = ["Jake Abendroth <contact@jakea.net>"]

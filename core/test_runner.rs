@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use lao_orchestrator_core::{run_workflow_yaml, load_workflow_yaml};
 use lao_orchestrator_core::plugins::PluginRegistry;
+use lao_orchestrator_core::cross_platform::PathUtils;
 
 #[derive(Parser)]
 #[command(name = "lao")]
@@ -33,7 +34,8 @@ fn main() {
             if dry_run {
                 match load_workflow_yaml(&path) {
                     Ok(workflow) => {
-                        let plugin_registry = PluginRegistry::dynamic_registry("../plugins/");
+                        let plugin_dir = PathUtils::plugin_dir();
+                        let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
                         println!("[DRY RUN] Workflow: {}", workflow.workflow);
                         for (i, step) in workflow.steps.iter().enumerate() {
                             let plugin = plugin_registry.get(&step.run);
@@ -71,7 +73,8 @@ fn main() {
         Commands::Validate { path } => {
             match load_workflow_yaml(&path) {
                 Ok(workflow) => {
-                    let plugin_registry = PluginRegistry::dynamic_registry("../plugins/");
+                    let plugin_dir = PathUtils::plugin_dir();
+                    let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
                     let dag = lao_orchestrator_core::build_dag(&workflow.steps).unwrap();
                     let errors = lao_orchestrator_core::validate_workflow_types(&dag, &plugin_registry);
                     if errors.is_empty() {
@@ -90,7 +93,8 @@ fn main() {
             }
         }
         Commands::PluginList => {
-            let plugin_registry = PluginRegistry::dynamic_registry("../plugins/");
+            let plugin_dir = PathUtils::plugin_dir();
+            let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
             println!("Available plugins:");
             for name in plugin_registry.plugins.keys() {
                 println!("- {name}");

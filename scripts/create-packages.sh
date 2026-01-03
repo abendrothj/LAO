@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Disable job control globally to prevent fg/bg issues in CI environments
+set +m
 
 # Cross-platform packaging script for LAO
 # Creates platform-specific packages for distribution
@@ -232,8 +234,9 @@ create_rpm_package() {
     local spec_dir="$rpm_dir/SPECS"
     local build_dir="$rpm_dir/BUILD"
     local rpmbuild_dir="$rpm_dir/RPMS"
+    local sources_dir="$rpm_dir/SOURCES"
     
-    mkdir -p "$spec_dir" "$build_dir" "$rpmbuild_dir"
+    mkdir -p "$spec_dir" "$build_dir" "$rpmbuild_dir" "$sources_dir"
     
     # Create spec file
     cat > "$spec_dir/lao.spec" << EOF
@@ -246,8 +249,10 @@ License:        MIT
 URL:            https://github.com/abendrothj/lao
 Source0:        lao-%{version}.tar.gz
 
-BuildRequires:  rust
-BuildRequires:  cargo
+BuildRequires:  gcc
+BuildRequires:  make
+# Note: cargo and rust are typically installed via rustup in CI environments
+# If these packages are not available, the build will use pre-built binaries
 Requires:       gtk3
 Requires:       webkit2gtk3
 
@@ -260,18 +265,20 @@ visual DAG editing, and full offline execution.
 %setup -q
 
 %build
-cargo build --release
+# Use pre-built binaries instead of building from source
+# This avoids dependency issues in CI environments
 
 %install
 mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/lib/lao/plugins
 mkdir -p %{buildroot}/usr/share/applications
 
+# Install pre-built binaries from the tarball
 install -m 755 target/release/lao-cli %{buildroot}/usr/bin/
 install -m 755 target/release/lao-ui %{buildroot}/usr/bin/
 install -m 644 plugins/*.so %{buildroot}/usr/lib/lao/plugins/ 2>/dev/null || true
 
-cat > %{buildroot}/usr/share/applications/lao.desktop << 'EOF'
+cat > %{buildroot}/usr/share/applications/lao.desktop << 'DESKTOP_EOF'
 [Desktop Entry]
 Name=LAO Orchestrator
 Comment=$APP_DESCRIPTION
@@ -280,7 +287,7 @@ Icon=lao
 Type=Application
 Categories=Development;Utility;
 StartupNotify=true
-EOF
+DESKTOP_EOF
 
 %files
 /usr/bin/lao-cli
@@ -293,20 +300,105 @@ EOF
 - Initial release of LAO Orchestrator
 EOF
     
-    # Create source tarball
-    tar -czf "$rpm_dir/SOURCES/lao-$VERSION.tar.gz" \
-        --exclude=target \
-        --exclude=.git \
-        --exclude=dist \
-        -C "$ROOT_DIR" .
+    # Create source tarball with proper directory structure
+    # RPM expects the tarball to extract to a directory named lao-VERSION
+    local temp_dir="/tmp/lao-tarball-$$"
+    mkdir -p "$temp_dir/lao-$VERSION"
+    
+    # Copy source files to the temp directory
+    cp -r "$ROOT_DIR"/* "$temp_dir/lao-$VERSION/" 2>/dev/null || true
+    cp -r "$ROOT_DIR"/.[^.]* "$temp_dir/lao-$VERSION/" 2>/dev/null || true
+    
+    # Remove excluded directories
+    rm -rf "$temp_dir/lao-$VERSION/target" 2>/dev/null || true
+    rm -rf "$temp_dir/lao-$VERSION/.git" 2>/dev/null || true
+    rm -rf "$temp_dir/lao-$VERSION/dist" 2>/dev/null || true
+    
+    # Copy pre-built binaries to the tarball for RPM installation
+    mkdir -p "$temp_dir/lao-$VERSION/target/release"
+    cp "$ROOT_DIR/target/release/lao-cli" "$temp_dir/lao-$VERSION/target/release/" 2>/dev/null || true
+    cp "$ROOT_DIR/target/release/lao-ui" "$temp_dir/lao-$VERSION/target/release/" 2>/dev/null || true
+    
+    # Create tarball from the temp directory
+    tar -czf "$sources_dir/lao-$VERSION.tar.gz" \
+        -C "$temp_dir" "lao-$VERSION"
+    
+    # Clean up temp directory
+    rm -rf "$temp_dir"
+    
+    # Check if rpmbuild is available
+    if ! command -v rpmbuild >/dev/null 2>&1; then
+        echo "⚠️  rpmbuild not found, skipping RPM package creation"
+        echo "💡 Install rpm-build package to enable RPM creation"
+        return 0
+    fi
     
     # Build RPM
-    rpmbuild --define "_topdir $rpm_dir" -ba "$spec_dir/lao.spec"
+    echo "🔨 Building RPM package..."
     
-    # Copy built RPM
-    cp "$rpmbuild_dir/x86_64/lao-$VERSION-1.*.rpm" "$DIST_DIR/"
+    # Try a different approach: Use rpmbuild with specific options to avoid job control
+    echo "Debug: Running rpmbuild with specific options..."
+    echo "Debug: RPM directories:"
+    echo "  spec_dir: $spec_dir"
+    echo "  rpm_dir: $rpm_dir"
+    echo "  rpmbuild_dir: $rpmbuild_dir"
+    echo "  sources_dir: $sources_dir"
     
-    echo "✅ RPM package created: $DIST_DIR/lao-$VERSION-1.*.rpm"
+    # List contents of key directories for debugging
+    echo "Debug: Contents of sources directory:"
+    ls -la "$sources_dir/" || echo "Sources directory not found"
+    
+    echo "Debug: Contents of spec directory:"
+    ls -la "$spec_dir/" || echo "Spec directory not found"
+    
+    # Try building with --quiet and --nodeps to minimize interaction
+    echo "Attempting RPM build with --quiet --nodeps..."
+    if rpmbuild --define "_topdir $rpm_dir" -bb "$spec_dir/lao.spec" --quiet --nodeps; then
+        echo "RPM build succeeded with --quiet --nodeps"
+        echo "Debug: Contents of RPM build directory after build:"
+        ls -la "$rpmbuild_dir/" || echo "RPM build directory not found"
+        ls -la "$rpmbuild_dir/x86_64/" || echo "x86_64 directory not found"
+        # Check if RPM file was actually created
+        if ls "$rpmbuild_dir/x86_64/lao-$VERSION-1."*.rpm 1> /dev/null 2>&1; then
+            cp "$rpmbuild_dir/x86_64/lao-$VERSION-1."*.rpm "$DIST_DIR/"
+            echo "✅ RPM package created: $DIST_DIR/lao-$VERSION-1.*.rpm"
+        else
+            echo "❌ RPM build succeeded but no package file found"
+            return 1
+        fi
+    else
+        echo "❌ RPM build failed with --quiet --nodeps, trying without quiet mode..."
+        # Try without --quiet flag
+        if rpmbuild --define "_topdir $rpm_dir" -bb "$spec_dir/lao.spec" --nodeps; then
+            echo "RPM build succeeded with --nodeps"
+            # Check if RPM file was actually created
+            if ls "$rpmbuild_dir/x86_64/lao-$VERSION-1."*.rpm 1> /dev/null 2>&1; then
+                cp "$rpmbuild_dir/x86_64/lao-$VERSION-1."*.rpm "$DIST_DIR/"
+                echo "✅ RPM package created: $DIST_DIR/lao-$VERSION-1.*.rpm"
+            else
+                echo "❌ RPM build succeeded but no package file found"
+                return 1
+            fi
+        else
+            echo "❌ RPM build failed with --nodeps, trying with minimal options..."
+            # Try with minimal options
+            if rpmbuild --define "_topdir $rpm_dir" -bb "$spec_dir/lao.spec"; then
+                echo "RPM build succeeded with minimal options"
+                # Check if RPM file was actually created
+                if ls "$rpmbuild_dir/x86_64/lao-$VERSION-1."*.rpm 1> /dev/null 2>&1; then
+                    cp "$rpmbuild_dir/x86_64/lao-$VERSION-1."*.rpm "$DIST_DIR/"
+                    echo "✅ RPM package created: $DIST_DIR/lao-$VERSION-1.*.rpm"
+                else
+                    echo "❌ RPM build succeeded but no package file found"
+                    return 1
+                fi
+            else
+                echo "❌ RPM build failed - this may be due to missing dependencies"
+                echo "💡 Try installing: sudo apt-get install rpm-build"
+                return 1
+            fi
+        fi
+    fi
 }
 
 # Function to create tar archive
@@ -401,6 +493,10 @@ create_dmg_package() {
     mkdir -p "$app_dir/Contents/PlugIns/plugins"
     cp plugins/*.dylib "$app_dir/Contents/PlugIns/plugins/" 2>/dev/null || true
     
+    # Set proper permissions
+    chmod +x "$app_dir/Contents/MacOS/lao-cli"
+    chmod +x "$app_dir/Contents/MacOS/lao-ui"
+    
     # Create Info.plist
     cat > "$app_dir/Contents/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -429,10 +525,76 @@ create_dmg_package() {
 </plist>
 EOF
     
-    # Create DMG
-    hdiutil create -volname "LAO $VERSION" -srcfolder "$dmg_dir" -ov -format UDZO "$DIST_DIR/LAO-$VERSION.dmg"
+    # Create DMG with proper settings to avoid corruption
+    echo "Creating DMG with hdiutil..."
+    echo "Debug: DMG directory contents:"
+    ls -la "$dmg_dir/"
     
-    echo "✅ DMG package created: $DIST_DIR/LAO-$VERSION.dmg"
+    # First, create a temporary DMG
+    local temp_dmg="$DIST_DIR/LAO-$VERSION-temp.dmg"
+    local final_dmg="$DIST_DIR/LAO-$VERSION.dmg"
+    
+    # Calculate size needed (add some padding)
+    local size_mb=$(du -sm "$dmg_dir" | cut -f1)
+    local size_mb=$((size_mb + 20))  # Add 20MB padding for safety
+    echo "Debug: Calculated DMG size: ${size_mb}MB"
+    
+    # Create temporary DMG
+    echo "Creating temporary DMG..."
+    if ! hdiutil create -size "${size_mb}m" -fs HFS+ -volname "LAO $VERSION" "$temp_dmg"; then
+        echo "❌ Failed to create temporary DMG"
+        return 1
+    fi
+    
+    # Mount the DMG at a fixed, known mount point to avoid parsing issues with spaces
+    echo "Mounting DMG..."
+    local mount_point="$DIST_DIR/LAO-$VERSION-mnt"
+    mkdir -p "$mount_point"
+    if ! hdiutil attach "$temp_dmg" -mountpoint "$mount_point" -nobrowse -quiet; then
+        echo "❌ Failed to mount DMG"
+        rmdir "$mount_point" 2>/dev/null || true
+        return 1
+    fi
+    
+    # Copy contents to mounted DMG
+    echo "Copying contents to DMG..."
+    if ! cp -R "$dmg_dir"/* "$mount_point/"; then
+        echo "❌ Failed to copy contents to DMG"
+        hdiutil detach "$mount_point" 2>/dev/null || true
+        return 1
+    fi
+    
+    # Unmount the DMG
+    echo "Unmounting DMG..."
+    if ! hdiutil detach "$mount_point" -quiet; then
+        echo "❌ Failed to unmount DMG"
+        return 1
+    fi
+    rmdir "$mount_point" 2>/dev/null || true
+    sync
+    sleep 1
+    
+    # Convert to compressed format (overwrite if exists)
+    echo "Converting to compressed format..."
+    if [ -f "$final_dmg" ]; then rm -f "$final_dmg"; fi
+    if ! hdiutil convert "$temp_dmg" -format UDZO -o "$final_dmg" -ov; then
+        echo "❌ Failed to convert DMG to compressed format"
+        rm -f "$temp_dmg"
+        return 1
+    fi
+    
+    # Clean up temporary file
+    rm -f "$temp_dmg"
+    
+    # Verify the DMG
+    echo "Verifying DMG..."
+    if hdiutil verify "$final_dmg"; then
+        echo "✅ DMG package created and verified: $final_dmg"
+        echo "Debug: DMG file size: $(ls -lh "$final_dmg" | awk '{print $5}')"
+    else
+        echo "❌ DMG verification failed"
+        return 1
+    fi
 }
 
 # Function to create macOS tar archive
@@ -544,9 +706,53 @@ create_msi_package() {
 EOF
     
     echo "✅ WiX configuration created: $msi_dir/lao.wxs"
-    echo "💡 Use WiX Toolset to build MSI:"
-    echo "   candle $msi_dir/lao.wxs"
-    echo "   light lao.wixobj"
+    echo "🔧 Building MSI with WiX Toolset..."
+    local ps_script="$msi_dir/build-wix.ps1"
+    cat > "$ps_script" <<'EOF'
+param(
+    [Parameter(Mandatory=$true)][string]$Version,
+    [Parameter(Mandatory=$true)][string]$MsiDir,
+    [Parameter(Mandatory=$true)][string]$DistDir
+)
+
+trap { Write-Error $_; exit 1 }
+
+function Has-Command {
+    param([string]$Name)
+    return (Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
+if (-not (Has-Command 'candle.exe')) {
+    Write-Host 'Installing WiX Toolset via Chocolatey...'
+    if (-not (Has-Command 'choco.exe')) {
+        Write-Host 'Chocolatey not found; installing Chocolatey...'
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    }
+    choco install wixtoolset -y --no-progress
+}
+
+$wixBin = (Get-Command candle.exe | Select-Object -First 1).Source | Split-Path
+$env:Path = $wixBin + ';' + $env:Path
+$msiPath = (Resolve-Path $MsiDir).Path
+$distPath = (Resolve-Path $DistDir).Path
+$wxs = Join-Path $msiPath 'lao.wxs'
+$wixobj = Join-Path $msiPath 'lao.wixobj'
+$msiOut = Join-Path $distPath ("lao-$Version-x86_64.msi")
+
+Write-Host ("Using WiX bin: $wixBin")
+
+& candle.exe -nologo -o $wixobj $wxs
+if ($LASTEXITCODE -ne 0) { throw 'candle.exe failed' }
+
+& light.exe -nologo -o $msiOut $wixobj
+if ($LASTEXITCODE -ne 0) { throw 'light.exe failed' }
+EOF
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$ps_script" -Version "$VERSION" -MsiDir "$msi_dir" -DistDir "$DIST_DIR"
+    rm -f "$ps_script"
+    echo "✅ MSI created: $DIST_DIR/lao-$VERSION-x86_64.msi"
 }
 
 # Function to create Windows ZIP archive
@@ -595,10 +801,18 @@ EOF
     
     # Create archive
     cd "$archive_dir"
-    zip -r "$DIST_DIR/lao-$VERSION-windows-x86_64.zip" "lao-$VERSION-windows"
-    cd "$ROOT_DIR"
     
-    echo "✅ Windows ZIP archive created: $DIST_DIR/lao-$VERSION-windows-x86_64.zip"
+    # Check if zip command is available
+    if command -v zip >/dev/null 2>&1; then
+        zip -r "$DIST_DIR/lao-$VERSION-windows-x86_64.zip" "lao-$VERSION-windows"
+        echo "✅ Windows ZIP archive created: $DIST_DIR/lao-$VERSION-windows-x86_64.zip"
+    else
+        echo "⚠️  zip command not found, creating tar.gz instead"
+        tar -czf "$DIST_DIR/lao-$VERSION-windows-x86_64.tar.gz" "lao-$VERSION-windows"
+        echo "✅ Windows tar.gz archive created: $DIST_DIR/lao-$VERSION-windows-x86_64.tar.gz"
+    fi
+    
+    cd "$ROOT_DIR"
 }
 
 # Main packaging function

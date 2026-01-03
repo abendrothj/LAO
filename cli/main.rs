@@ -3,6 +3,7 @@ use lao_orchestrator_core::{
     run_workflow_yaml, load_workflow_yaml, plugins::PluginRegistry,
     scheduler::WorkflowScheduler, workflow_state::WorkflowSchedule,
     plugin_manager::PluginManager, plugin_dev_tools::{PluginDevTools, PluginTemplate},
+    cross_platform::PathUtils,
 };
 use lao_plugin_api::PluginInput;
 use serde::Deserialize;
@@ -239,7 +240,8 @@ fn main() {
             if dry_run {
                 match load_workflow_yaml(&path) {
                     Ok(workflow) => {
-                        let plugin_registry = PluginRegistry::dynamic_registry("plugins/");
+                        let plugin_dir = PathUtils::plugin_dir();
+                        let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
                         println!("[DRY RUN] Workflow: {}", workflow.workflow);
                         for (i, step) in workflow.steps.iter().enumerate() {
                             let plugin = plugin_registry.plugins.get(&step.run);
@@ -277,7 +279,8 @@ fn main() {
         Commands::Validate { path } => {
             match load_workflow_yaml(&path) {
                 Ok(workflow) => {
-                    let plugin_registry = PluginRegistry::dynamic_registry("plugins/");
+                    let plugin_dir = PathUtils::plugin_dir();
+                    let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
                     let dag = match lao_orchestrator_core::build_dag(&workflow.steps) {
                         Ok(d) => d,
                         Err(e) => {
@@ -302,7 +305,8 @@ fn main() {
             }
         }
         Commands::PluginList => {
-            let plugin_registry = PluginRegistry::dynamic_registry("plugins/");
+            let plugin_dir = PathUtils::plugin_dir();
+            let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
             println!("Available plugins:");
             for (name, _plugin) in &plugin_registry.plugins {
                 println!("- {}", name);
@@ -328,7 +332,8 @@ fn main() {
         }
         Commands::Prompt { prompt, output } => {
             // Use the PromptDispatcherPlugin to generate a workflow YAML
-            let mut registry = PluginRegistry::dynamic_registry("plugins/");
+            let plugin_dir = PathUtils::plugin_dir();
+            let registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
             let dispatcher = match registry.plugins.get("PromptDispatcher") {
                 Some(d) => d,
                 None => {
@@ -391,7 +396,8 @@ fn main() {
                     }
                 }
             };
-            let mut registry = PluginRegistry::dynamic_registry("plugins/");
+            let plugin_dir = PathUtils::plugin_dir();
+            let registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
             let dispatcher = match registry.plugins.get("PromptDispatcher") {
                 Some(d) => d,
                 None => {

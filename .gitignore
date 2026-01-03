@@ -7,6 +7,18 @@ Thumbs.db
 **/target/
 Cargo.lock
 
+# Distribution packages
+/dist/
+
+# Build artifacts
+*.tar.gz
+*.dmg
+*.deb
+*.rpm
+*.AppImage
+*.msi
+*.zip
+
 # Node/Svelte
 /ui/lao-ui/node_modules/
 /ui/lao-ui/.svelte-kit/

@@ -18,35 +18,51 @@ LAO is a cross-platform desktop tool for chaining local AI models and plugins in
 
 ## ✨ Features
 
-- [x] Modular plugin system (Rust, local-first)
-- [x] Offline DAG engine (retries, caching, lifecycle hooks)
-- [x] Prompt-driven agentic workflows (LLM-powered, system prompt file)
-- [x] Visual workflow builder (UI, YAML export, node/edge display)
-- [x] CLI (run, validate, prompt, validate-prompts, plugin list)
-- [x] Prompt library (Markdown + JSON, for validation/fine-tuning)
-- [x] Test harness for prompt validation
-- [ ] End-to-end “Run” from UI (execute and show logs/results)
-- [x] UI streaming run with real-time step events and parallel execution option
-- [ ] Node/edge editing in UI (drag, connect, edit)
+- [x] **Modular plugin system** (Rust, local-first, dynamic loading)
+- [x] **Offline DAG engine** (retries, caching, lifecycle hooks)
+- [x] **Prompt-driven agentic workflows** (LLM-powered, system prompt file)
+- [x] **Visual workflow builder** (egui-based native GUI, drag & drop)
+- [x] **CLI interface** (run, validate, prompt, validate-prompts, plugin list)
+- [x] **Prompt library** (Markdown + JSON, for validation/fine-tuning)
+- [x] **Test harness** for prompt validation
+- [x] **End-to-end execution** from UI (execute and show logs/results)
+- [x] **UI streaming run** with real-time step events and parallel execution
+- [x] **Node/edge editing** in UI (drag, connect, edit, delete)
+- [x] **Cross-platform support** (Linux, macOS, Windows)
+- [x] **Conditional/branching steps** (output-based conditions)
+- [ ] **Multi-modal input** (files, voice, images, video)
+- [x] **Automated packaging** (deb, rpm, AppImage, dmg, msi, zip)
+- [x] **CI/CD pipeline** (GitHub Actions, automated releases)
 - [ ] Plugin explainability (`lao explain plugin <name>`)
-- [ ] Conditional/branching steps
 - [ ] Plugin marketplace/discovery
 - [ ] Live workflow status/logs in UI
-- [ ] Multi-modal input (files, voice, etc.)
-- [ ] Installer/distribution polish
 
 ---
 
 ## 🚀 Quickstart
 
+### GUI (Recommended)
 ```sh
-# Run the native GUI
+# Run the native GUI with visual workflow builder
 cargo run --bin lao-ui
+```
 
-# Run the CLI
+### CLI
+```sh
+# Run workflows from command line
 cargo run --bin lao-cli run workflows/test.yaml
+
+# Generate workflows from natural language
 cargo run --bin lao-cli prompt "Summarize this audio and tag action items"
+
+# Validate prompt library
 cargo run --bin lao-cli validate-prompts
+```
+
+### Build Plugins
+```sh
+# Build all plugins for your platform
+bash scripts/build-plugins.sh
 ```
 
 ---

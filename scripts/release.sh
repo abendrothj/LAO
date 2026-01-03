@@ -205,30 +205,9 @@ create_and_push_tag() {
 
 # Function to trigger GitHub Actions workflow
 trigger_workflow() {
-    echo "🤖 Triggering GitHub Actions workflow..."
-    
-    # Check if gh CLI is available
-    if ! command -v gh > /dev/null 2>&1; then
-        echo "⚠️  GitHub CLI (gh) not found"
-        echo "💡 Install with: brew install gh (macOS) or visit https://cli.github.com/"
-        echo "🔄 Workflow will trigger automatically on tag push"
-        return 0
-    fi
-    
-    # Check if authenticated
-    if ! gh auth status > /dev/null 2>&1; then
-        echo "⚠️  Not authenticated with GitHub CLI"
-        echo "💡 Authenticate with: gh auth login"
-        echo "🔄 Workflow will trigger automatically on tag push"
-        return 0
-    fi
-    
-    # Trigger workflow manually (optional)
-    echo "🚀 Triggering package workflow..."
-    gh workflow run package.yml -f platform=all
-    
-    echo "✅ Workflow triggered successfully"
+    echo "🤖 GitHub Actions workflow will trigger automatically on tag push..."
     echo "🔗 View progress: https://github.com/abendrothj/lao/actions"
+    echo "💡 No manual trigger needed - workflow runs automatically on tag push"
 }
 
 # Function to show release checklist

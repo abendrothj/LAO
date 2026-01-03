@@ -1,6 +1,6 @@
 [package]
 name = "plugin-template"
-version = "0.1.0"
+version = "0.1.20"
 edition = "2021"
 description = "A template for LAO plugins. Rename and update for your plugin."
 authors = ["Jake Abendroth <contact@jakea.net>"]

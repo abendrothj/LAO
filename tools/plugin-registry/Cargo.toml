@@ -1,6 +1,6 @@
 [package]
 name = "lao-plugin-registry"
-version = "0.1.0"
+version = "0.1.20"
 edition = "2021"
 description = "LAO Plugin Registry Server"
 authors = ["Jake Abendroth <contact@jakea.net>"]

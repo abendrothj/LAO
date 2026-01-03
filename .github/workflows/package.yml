@@ -17,9 +17,12 @@ on:
         - macos
         - windows
 
+permissions:
+  contents: write
+
 jobs:
   package-linux:
-    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'linux' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'linux') || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     
     steps:
@@ -49,6 +52,9 @@ jobs:
         path: target
         key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
     
+    - name: Run tests
+      run: cargo test
+    
     - name: Build release
       run: |
         cargo build --release --bin lao-cli
@@ -69,10 +75,12 @@ jobs:
           dist/*.rpm
           dist/*.tar.gz
           dist/AppImage/
+          target/release/lao-cli
+          target/release/lao-ui
         retention-days: 30
 
   package-macos:
-    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos') || github.event_name == 'push' }}
     runs-on: macos-latest
     
     steps:
@@ -97,6 +105,9 @@ jobs:
         path: target
         key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
     
+    - name: Run tests
+      run: cargo test
+    
     - name: Build release
       run: |
         cargo build --release --bin lao-cli
@@ -115,10 +126,12 @@ jobs:
         path: |
           dist/*.dmg
           dist/*.tar.gz
+          target/release/lao-cli
+          target/release/lao-ui
         retention-days: 30
 
   package-windows:
-    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'windows' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'windows') || github.event_name == 'push' }}
     runs-on: windows-latest
     
     steps:
@@ -143,6 +156,9 @@ jobs:
         path: target
         key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
     
+    - name: Run tests
+      run: cargo test
+    
     - name: Build release
       run: |
         cargo build --release --bin lao-cli
@@ -161,6 +177,8 @@ jobs:
         path: |
           dist/*.msi
           dist/*.zip
+          target/release/lao-cli.exe
+          target/release/lao-ui.exe
         retention-days: 30
 
   create-release:
@@ -169,18 +187,57 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
     - name: Download all packages
       uses: actions/download-artifact@v4
       with:
         path: packages/
     
+    - name: Extract packages for release
+      run: |
+        mkdir -p release-assets
+        # Extract all package files
+        find packages/ -name "*.deb" -exec cp {} release-assets/ \;
+        find packages/ -name "*.rpm" -exec cp {} release-assets/ \;
+        find packages/ -name "*.tar.gz" -exec cp {} release-assets/ \;
+        find packages/ -name "*.dmg" -exec cp {} release-assets/ \;
+        find packages/ -name "*.msi" -exec cp {} release-assets/ \;
+        find packages/ -name "*.zip" -exec cp {} release-assets/ \;
+        find packages/ -name "*.AppImage" -exec cp {} release-assets/ \;
+        # Also include the binaries directly
+        find packages/ -name "lao-cli" -exec cp {} release-assets/ \;
+        find packages/ -name "lao-ui" -exec cp {} release-assets/ \;
+        find packages/ -name "lao-cli.exe" -exec cp {} release-assets/ \;
+        find packages/ -name "lao-ui.exe" -exec cp {} release-assets/ \;
+        ls -la release-assets/
+    
+    - name: Get commit message
+      id: commit_message
+      run: |
+        COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+        echo "message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+        echo "Commit message: $COMMIT_MSG"
+    
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          packages/linux-packages/*
-          packages/macos-packages/*
-          packages/windows-packages/*
+          release-assets/*
+        body: |
+          ## Changes in this release
+          ${{ steps.commit_message.outputs.message }}
+          
+          ## Installation
+          Choose the appropriate package for your platform:
+          - **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (RedHat/Fedora), `.AppImage` (portable), or `.tar.gz`
+          - **macOS**: `.dmg` (recommended) or `.tar.gz`
+          - **Windows**: `.msi` (recommended) or `.zip`
+          
+          ## Binaries
+          Direct binaries are also available for manual installation.
         generate_release_notes: true
         draft: false
         prerelease: false

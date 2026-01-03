@@ -1,6 +1,6 @@
 [package]
 name = "lao_plugin_api"
-version = "0.1.0"
+version = "0.1.20"
 edition = "2021"
 description = "API for LAO plugins"
 authors = ["Jake Abendroth <contact@jakea.net>"]

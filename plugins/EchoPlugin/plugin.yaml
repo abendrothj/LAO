@@ -1,1 +1,12 @@
-not: yaml: [
+name: EchoPlugin
+version: 0.1.0
+description: Echoes input text back as output
+maintainer: LAO Contributors
+tags: [text, echo, debug]
+input:
+  type: text
+output:
+  type: text
+example_prompts:
+  - "Echo this text"
+  - "Repeat what I said"
