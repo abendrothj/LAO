@@ -682,15 +682,21 @@ create_msi_package() {
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLFOLDER" Name="LAO">
-          <Component Id="MainExecutable" Guid="*">
+          <Component Id="LaoCliCmp" Guid="*">
             <File Id="LaoCliExe" Source="target/release/lao-cli.exe" KeyPath="yes" />
-            <File Id="LaoUiExe" Source="target/release/lao-ui.exe" />
+          </Component>
+          <Component Id="LaoUiCmp" Guid="*">
+            <File Id="LaoUiExe" Source="target/release/lao-ui.exe" KeyPath="yes" />
           </Component>
           <Directory Id="PluginsFolder" Name="plugins">
-            <Component Id="Plugins" Guid="*">
-              <File Id="Plugin1" Source="plugins/echo_plugin.dll" />
-              <File Id="Plugin2" Source="plugins/ollama_plugin.dll" />
-              <File Id="Plugin3" Source="plugins/whisper_plugin.dll" />
+            <Component Id="EchoPluginCmp" Guid="*">
+              <File Id="EchoPluginDll" Source="plugins/echo_plugin.dll" KeyPath="yes" />
+            </Component>
+            <Component Id="OllamaPluginCmp" Guid="*">
+              <File Id="OllamaPluginDll" Source="plugins/ollama_plugin.dll" KeyPath="yes" />
+            </Component>
+            <Component Id="WhisperPluginCmp" Guid="*">
+              <File Id="WhisperPluginDll" Source="plugins/whisper_plugin.dll" KeyPath="yes" />
             </Component>
           </Directory>
         </Directory>
@@ -698,8 +704,11 @@ create_msi_package() {
     </Directory>
     
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <ComponentRef Id="MainExecutable" />
-      <ComponentRef Id="Plugins" />
+      <ComponentRef Id="LaoCliCmp" />
+      <ComponentRef Id="LaoUiCmp" />
+      <ComponentRef Id="EchoPluginCmp" />
+      <ComponentRef Id="OllamaPluginCmp" />
+      <ComponentRef Id="WhisperPluginCmp" />
     </ComponentGroup>
   </Product>
 </Wix>
