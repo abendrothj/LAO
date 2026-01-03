@@ -1,9 +1,9 @@
-use lao_plugin_api::{PluginInput, PluginOutput, PluginVTablePtr, PluginVTable};
+use anyhow::Result;
+use lao_plugin_api::{PluginInput, PluginOutput, PluginVTable, PluginVTablePtr};
+use log::{error, info};
+use serde::{Deserialize, Serialize};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use serde::{Deserialize, Serialize};
-use anyhow::Result;
-use log::{info, error};
 
 // Plugin configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,14 +25,12 @@ impl Default for PluginConfig {
             description: "AI model integration using Ollama".to_string(),
             author: "LAO Team".to_string(),
             tags: vec!["ai".to_string(), "ollama".to_string(), "llm".to_string()],
-            capabilities: vec![
-                lao_plugin_api::PluginCapability {
-                    name: "generate".to_string(),
-                    description: "Generate text using Ollama models".to_string(),
-                    input_type: lao_plugin_api::PluginInputType::Text,
-                    output_type: lao_plugin_api::PluginOutputType::Text,
-                }
-            ],
+            capabilities: vec![lao_plugin_api::PluginCapability {
+                name: "generate".to_string(),
+                description: "Generate text using Ollama models".to_string(),
+                input_type: lao_plugin_api::PluginInputType::Text,
+                output_type: lao_plugin_api::PluginOutputType::Text,
+            }],
             dependencies: vec![],
         }
     }
@@ -55,7 +53,9 @@ unsafe extern "C" fn run(input: *const PluginInput) -> PluginOutput {
     if input.is_null() {
         error!("Received null input");
         let error_msg = CString::new("error: null input").unwrap();
-        return PluginOutput { text: error_msg.into_raw() };
+        return PluginOutput {
+            text: error_msg.into_raw(),
+        };
     }
 
     let c_str = CStr::from_ptr((*input).text);
@@ -64,7 +64,9 @@ unsafe extern "C" fn run(input: *const PluginInput) -> PluginOutput {
         Err(_) => {
             error!("Invalid UTF-8 in input");
             let error_msg = CString::new("error: invalid UTF-8 input").unwrap();
-            return PluginOutput { text: error_msg.into_raw() };
+            return PluginOutput {
+                text: error_msg.into_raw(),
+            };
         }
     };
 
@@ -73,7 +75,9 @@ unsafe extern "C" fn run(input: *const PluginInput) -> PluginOutput {
     // Validate input
     if !validate_input_internal(input_text) {
         let error_msg = CString::new("error: invalid input format").unwrap();
-        return PluginOutput { text: error_msg.into_raw() };
+        return PluginOutput {
+            text: error_msg.into_raw(),
+        };
     }
 
     // Process input
@@ -87,7 +91,9 @@ unsafe extern "C" fn run(input: *const PluginInput) -> PluginOutput {
 
     info!("Returning output: {}", result);
     let output_cstring = CString::new(result).unwrap();
-    PluginOutput { text: output_cstring.into_raw() }
+    PluginOutput {
+        text: output_cstring.into_raw(),
+    }
 }
 
 // Free output function
@@ -120,16 +126,12 @@ unsafe extern "C" fn run_with_buffer(
 
     let result_bytes = result.as_bytes();
     let copy_len = std::cmp::min(result_bytes.len(), buffer_len - 1);
-    
-    std::ptr::copy_nonoverlapping(
-        result_bytes.as_ptr(),
-        buffer as *mut u8,
-        copy_len,
-    );
-    
+
+    std::ptr::copy_nonoverlapping(result_bytes.as_ptr(), buffer as *mut u8, copy_len);
+
     // Null terminate
     *buffer.add(copy_len) = 0;
-    
+
     copy_len
 }
 
@@ -142,7 +144,7 @@ unsafe extern "C" fn get_metadata() -> lao_plugin_api::PluginMetadata {
     static AUTHOR: &[u8] = b"LAO Team\0";
     static TAGS: &[u8] = b"[\"llm\", \"ollama\", \"text-generation\"]\0";
     static CAPABILITIES: &[u8] = b"[{\"name\":\"text-generation\",\"description\":\"Generate text using Ollama\",\"input_type\":\"Text\",\"output_type\":\"Text\"}]\0";
-    
+
     lao_plugin_api::PluginMetadata {
         name: NAME.as_ptr() as *const c_char,
         version: VERSION.as_ptr() as *const c_char,
@@ -161,13 +163,13 @@ unsafe extern "C" fn validate_input(input: *const PluginInput) -> bool {
     if input.is_null() {
         return false;
     }
-    
+
     let c_str = CStr::from_ptr((*input).text);
     let input_text = match c_str.to_str() {
         Ok(s) => s,
         Err(_) => return false,
     };
-    
+
     validate_input_internal(input_text)
 }
 
@@ -194,7 +196,7 @@ fn process_input(input: &str) -> Result<String> {
             "stream": false
         }))
         .send()?;
-    
+
     let result: serde_json::Value = response.json()?;
     Ok(result["response"].as_str().unwrap_or("").to_string())
 }
@@ -215,4 +217,4 @@ pub static PLUGIN_VTABLE: lao_plugin_api::PluginVTable = lao_plugin_api::PluginV
 #[no_mangle]
 pub extern "C" fn plugin_vtable() -> PluginVTablePtr {
     &PLUGIN_VTABLE
-} 
+}

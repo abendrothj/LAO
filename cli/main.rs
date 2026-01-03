@@ -1,9 +1,13 @@
 use clap::{Parser, Subcommand};
 use lao_orchestrator_core::{
-    run_workflow_yaml, load_workflow_yaml, plugins::PluginRegistry,
-    scheduler::WorkflowScheduler, workflow_state::WorkflowSchedule,
-    plugin_manager::PluginManager, plugin_dev_tools::{PluginDevTools, PluginTemplate},
     cross_platform::PathUtils,
+    load_workflow_yaml,
+    plugin_dev_tools::{PluginDevTools, PluginTemplate},
+    plugin_manager::PluginManager,
+    plugins::PluginRegistry,
+    run_workflow_yaml,
+    scheduler::WorkflowScheduler,
+    workflow_state::WorkflowSchedule,
 };
 use lao_plugin_api::PluginInput;
 use serde::Deserialize;
@@ -20,7 +24,7 @@ fn normalize_yaml(yaml: &str) -> serde_yaml::Value {
 
 fn strip_code_fences(s: &str) -> String {
     s.lines()
-        .filter(|line| !line.trim_start().starts_with("```") )
+        .filter(|line| !line.trim_start().starts_with("```"))
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
@@ -44,9 +48,7 @@ enum Commands {
         dry_run: bool,
     },
     /// Validate a workflow YAML file (type & plugin availability)
-    Validate {
-        path: String,
-    },
+    Validate { path: String },
     /// List available plugins
     PluginList,
     /// Scaffold a new workflow YAML template
@@ -58,12 +60,18 @@ enum Commands {
     /// Generate and run a workflow from a prompt
     Prompt {
         prompt: String,
-        #[arg(long, help = "Output file path (default: workflows/generated_from_prompt.yaml)")]
+        #[arg(
+            long,
+            help = "Output file path (default: workflows/generated_from_prompt.yaml)"
+        )]
         output: Option<String>,
     },
     /// Validate prompt-to-workflow generation using the prompt library
     ValidatePrompts {
-        #[arg(long, default_value = "core/prompt_dispatcher/prompt/prompt_library.json")]
+        #[arg(
+            long,
+            default_value = "core/prompt_dispatcher/prompt/prompt_library.json"
+        )]
         path: String,
         #[arg(long)]
         fail_fast: bool,
@@ -73,29 +81,24 @@ enum Commands {
     /// List all saved workflows in the workflows/ directory
     ListWorkflows,
     /// View a workflow YAML file by name (from workflows/ directory)
-    ViewWorkflow {
-        name: String,
-    },
+    ViewWorkflow { name: String },
     /// Delete a workflow YAML file by name (from workflows/ directory)
-    DeleteWorkflow {
-        name: String,
-    },
+    DeleteWorkflow { name: String },
     /// Explain a plugin's capabilities, schemas, and usage examples
-    ExplainPlugin {
-        name: String,
-    },
+    ExplainPlugin { name: String },
     /// Schedule a workflow to run at specified intervals
     Schedule {
         workflow_path: String,
-        #[arg(long, help = "Cron-like expression (e.g., 'interval:60' for every 60 minutes)")]
+        #[arg(
+            long,
+            help = "Cron-like expression (e.g., 'interval:60' for every 60 minutes)"
+        )]
         cron: String,
         #[arg(long, help = "Maximum number of times to run (optional)")]
         max_runs: Option<u32>,
     },
     /// Unschedule a workflow
-    Unschedule {
-        workflow_id: String,
-    },
+    Unschedule { workflow_id: String },
     /// List all scheduled workflows
     ListScheduled,
     /// Show workflow execution history and state
@@ -105,7 +108,11 @@ enum Commands {
     },
     /// Clean up old workflow states
     Cleanup {
-        #[arg(long, default_value = "168", help = "Remove states older than this many hours")]
+        #[arg(
+            long,
+            default_value = "168",
+            help = "Remove states older than this many hours"
+        )]
         max_age_hours: u64,
     },
     /// Run the workflow scheduler daemon
@@ -241,7 +248,9 @@ fn main() {
                 match load_workflow_yaml(&path) {
                     Ok(workflow) => {
                         let plugin_dir = PathUtils::plugin_dir();
-                        let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
+                        let plugin_registry = PluginRegistry::dynamic_registry(
+                            plugin_dir.to_str().unwrap_or("plugins"),
+                        );
                         println!("[DRY RUN] Workflow: {}", workflow.workflow);
                         for (i, step) in workflow.steps.iter().enumerate() {
                             let plugin = plugin_registry.plugins.get(&step.run);
@@ -276,37 +285,37 @@ fn main() {
                 }
             }
         }
-        Commands::Validate { path } => {
-            match load_workflow_yaml(&path) {
-                Ok(workflow) => {
-                    let plugin_dir = PathUtils::plugin_dir();
-                    let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
-                    let dag = match lao_orchestrator_core::build_dag(&workflow.steps) {
-                        Ok(d) => d,
-                        Err(e) => {
-                            eprintln!("[ERROR] Failed to build DAG: {}", e);
-                            std::process::exit(1);
-                        }
-                    };
-                    let errors = lao_orchestrator_core::validate_workflow_types(&dag, &plugin_registry);
-                    if errors.is_empty() {
-                        println!("Validation passed: all steps and plugins available.");
-                    } else {
-                        for (step, msg) in errors {
-                            println!("Step {}: {}", step, msg);
-                        }
+        Commands::Validate { path } => match load_workflow_yaml(&path) {
+            Ok(workflow) => {
+                let plugin_dir = PathUtils::plugin_dir();
+                let plugin_registry =
+                    PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
+                let dag = match lao_orchestrator_core::build_dag(&workflow.steps) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("[ERROR] Failed to build DAG: {}", e);
                         std::process::exit(1);
                     }
-                }
-                Err(e) => {
-                    eprintln!("Failed to load workflow: {}", e);
+                };
+                let errors = lao_orchestrator_core::validate_workflow_types(&dag, &plugin_registry);
+                if errors.is_empty() {
+                    println!("Validation passed: all steps and plugins available.");
+                } else {
+                    for (step, msg) in errors {
+                        println!("Step {}: {}", step, msg);
+                    }
                     std::process::exit(1);
                 }
             }
-        }
+            Err(e) => {
+                eprintln!("Failed to load workflow: {}", e);
+                std::process::exit(1);
+            }
+        },
         Commands::PluginList => {
             let plugin_dir = PathUtils::plugin_dir();
-            let plugin_registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
+            let plugin_registry =
+                PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
             println!("Available plugins:");
             for (name, _plugin) in &plugin_registry.plugins {
                 println!("- {}", name);
@@ -320,7 +329,11 @@ fn main() {
             );
             if let Some(parent) = std::path::Path::new(&path).parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
-                    eprintln!("[ERROR] Failed to create directory {}: {}", parent.display(), e);
+                    eprintln!(
+                        "[ERROR] Failed to create directory {}: {}",
+                        parent.display(),
+                        e
+                    );
                     std::process::exit(1);
                 }
             }
@@ -333,7 +346,8 @@ fn main() {
         Commands::Prompt { prompt, output } => {
             // Use the PromptDispatcherPlugin to generate a workflow YAML
             let plugin_dir = PathUtils::plugin_dir();
-            let registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
+            let registry =
+                PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
             let dispatcher = match registry.plugins.get("PromptDispatcher") {
                 Some(d) => d,
                 None => {
@@ -350,7 +364,9 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let input = PluginInput { text: c_prompt.into_raw() };
+            let input = PluginInput {
+                text: c_prompt.into_raw(),
+            };
             let output_obj = unsafe { ((*dispatcher.vtable).run)(&input) };
             let c_str = unsafe { std::ffi::CStr::from_ptr(output_obj.text) };
             let yaml = c_str.to_string_lossy().to_string();
@@ -359,10 +375,15 @@ fn main() {
             let clean_yaml = strip_code_fences(&yaml);
             match serde_yaml::from_str::<lao_orchestrator_core::Workflow>(&clean_yaml) {
                 Ok(_workflow) => {
-                    let out_path = output.unwrap_or_else(|| "workflows/generated_from_prompt.yaml".to_string());
+                    let out_path = output
+                        .unwrap_or_else(|| "workflows/generated_from_prompt.yaml".to_string());
                     if let Some(parent) = std::path::Path::new(&out_path).parent() {
                         if let Err(e) = std::fs::create_dir_all(parent) {
-                            eprintln!("[ERROR] Failed to create directory {}: {}", parent.display(), e);
+                            eprintln!(
+                                "[ERROR] Failed to create directory {}: {}",
+                                parent.display(),
+                                e
+                            );
                             std::process::exit(1);
                         }
                     }
@@ -378,7 +399,11 @@ fn main() {
                 }
             }
         }
-        Commands::ValidatePrompts { path, fail_fast, verbose } => {
+        Commands::ValidatePrompts {
+            path,
+            fail_fast,
+            verbose,
+        } => {
             // Load prompt pairs from the prompt library JSON
             let prompt_pairs: Vec<PromptPair> = {
                 let data = match std::fs::read_to_string(&path) {
@@ -397,7 +422,8 @@ fn main() {
                 }
             };
             let plugin_dir = PathUtils::plugin_dir();
-            let registry = PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
+            let registry =
+                PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
             let dispatcher = match registry.plugins.get("PromptDispatcher") {
                 Some(d) => d,
                 None => {
@@ -416,7 +442,9 @@ fn main() {
                         continue;
                     }
                 };
-                let input = PluginInput { text: c_prompt.into_raw() };
+                let input = PluginInput {
+                    text: c_prompt.into_raw(),
+                };
                 let output_obj = unsafe { ((*dispatcher.vtable).run)(&input) };
                 let c_str = unsafe { std::ffi::CStr::from_ptr(output_obj.text) };
                 let generated = c_str.to_string_lossy().to_string();
@@ -426,7 +454,13 @@ fn main() {
                 let pass = expected == actual;
                 if !pass {
                     failures += 1;
-                    println!("[FAIL] Prompt {}: {}\nExpected:\n{}\nActual:\n{}\n", i + 1, pair.prompt, pair.workflow, generated);
+                    println!(
+                        "[FAIL] Prompt {}: {}\nExpected:\n{}\nActual:\n{}\n",
+                        i + 1,
+                        pair.prompt,
+                        pair.workflow,
+                        generated
+                    );
                     if fail_fast {
                         println!("Fail-fast enabled. Stopping at first failure.");
                         std::process::exit(1);
@@ -502,7 +536,11 @@ fn main() {
             let yaml_str = match fs::read_to_string(&yaml_path) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln!("[ERROR] plugin.yaml not found for plugin '{}'. Looked in {}", name, yaml_path.display());
+                    eprintln!(
+                        "[ERROR] plugin.yaml not found for plugin '{}'. Looked in {}",
+                        name,
+                        yaml_path.display()
+                    );
                     std::process::exit(1);
                 }
             };
@@ -521,10 +559,16 @@ fn main() {
                 println!("Tags: {:?}", tags);
             }
             if let Some(input) = manifest.get("input") {
-                println!("Input Schema: {}", serde_yaml::to_string(input).unwrap_or_default().trim());
+                println!(
+                    "Input Schema: {}",
+                    serde_yaml::to_string(input).unwrap_or_default().trim()
+                );
             }
             if let Some(output) = manifest.get("output") {
-                println!("Output Schema: {}", serde_yaml::to_string(output).unwrap_or_default().trim());
+                println!(
+                    "Output Schema: {}",
+                    serde_yaml::to_string(output).unwrap_or_default().trim()
+                );
             }
             if let Some(examples) = manifest.get("example_prompts") {
                 println!("Example Prompts:");
@@ -537,15 +581,22 @@ fn main() {
                 }
             }
         }
-        Commands::Schedule { workflow_path, cron, max_runs } => {
-            let workflow_id = format!("scheduled_{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..8].to_string());
-            
+        Commands::Schedule {
+            workflow_path,
+            cron,
+            max_runs,
+        } => {
+            let workflow_id = format!(
+                "scheduled_{}",
+                uuid::Uuid::new_v4().to_string().replace("-", "")[..8].to_string()
+            );
+
             // Validate workflow exists
             if !std::path::Path::new(&workflow_path).exists() {
                 eprintln!("[ERROR] Workflow file not found: {}", workflow_path);
                 std::process::exit(1);
             }
-            
+
             let schedule = WorkflowSchedule {
                 cron_expression: Some(cron.clone()),
                 next_run: None,
@@ -553,7 +604,7 @@ fn main() {
                 max_runs,
                 run_count: 0,
             };
-            
+
             let mut scheduler = match WorkflowScheduler::new("workflow_states") {
                 Ok(s) => s,
                 Err(e) => {
@@ -561,10 +612,14 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            
-            match scheduler.schedule_workflow(workflow_id.clone(), workflow_path.clone(), schedule) {
+
+            match scheduler.schedule_workflow(workflow_id.clone(), workflow_path.clone(), schedule)
+            {
                 Ok(_) => {
-                    println!("✓ Scheduled workflow '{}' with ID: {}", workflow_path, workflow_id);
+                    println!(
+                        "✓ Scheduled workflow '{}' with ID: {}",
+                        workflow_path, workflow_id
+                    );
                     println!("  Cron expression: {}", cron);
                     if let Some(max) = max_runs {
                         println!("  Max runs: {}", max);
@@ -584,7 +639,7 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            
+
             match scheduler.unschedule_workflow(&workflow_id) {
                 Ok(_) => println!("✓ Unscheduled workflow: {}", workflow_id),
                 Err(e) => {
@@ -601,7 +656,7 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            
+
             let scheduled = scheduler.list_scheduled_workflows();
             if scheduled.is_empty() {
                 println!("No scheduled workflows found.");
@@ -628,7 +683,7 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            
+
             if let Some(id) = workflow_id {
                 match scheduler.get_workflow_history(&id) {
                     Ok(Some(state)) => {
@@ -641,7 +696,10 @@ fn main() {
                         if let Some(completed) = state.completed_at {
                             println!("Completed: {:?}", completed);
                         }
-                        println!("Progress: {}/{} steps", state.current_step, state.total_steps);
+                        println!(
+                            "Progress: {}/{} steps",
+                            state.current_step, state.total_steps
+                        );
                         if let Some(error) = &state.error_message {
                             println!("Error: {}", error);
                         }
@@ -656,7 +714,10 @@ fn main() {
                 } else {
                     println!("All workflow states:");
                     for state in states {
-                        println!("  {} - {} ({:?})", state.workflow_id, state.workflow_name, state.status);
+                        println!(
+                            "  {} - {} ({:?})",
+                            state.workflow_id, state.workflow_name, state.status
+                        );
                     }
                 }
             }
@@ -669,7 +730,7 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            
+
             match scheduler.cleanup_old_states(max_age_hours) {
                 Ok(count) => println!("✓ Cleaned up {} old workflow states", count),
                 Err(e) => eprintln!("[ERROR] Failed to cleanup states: {}", e),
@@ -678,7 +739,7 @@ fn main() {
         Commands::Daemon { interval } => {
             println!("Starting LAO workflow scheduler daemon...");
             println!("Check interval: {} seconds", interval);
-            
+
             let mut scheduler = match WorkflowScheduler::new("workflow_states") {
                 Ok(s) => s,
                 Err(e) => {
@@ -686,7 +747,7 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            
+
             loop {
                 let due_workflows = scheduler.get_due_workflows();
                 if !due_workflows.is_empty() {
@@ -697,7 +758,7 @@ fn main() {
                         let _ = scheduler.update_workflow_run(&workflow_id);
                     }
                 }
-                
+
                 std::thread::sleep(std::time::Duration::from_secs(interval));
             }
         }
@@ -709,92 +770,88 @@ fn main() {
 
 fn handle_plugin_command(command: PluginCommands) {
     match command {
-        PluginCommands::List => {
-            match PluginManager::new("plugins/") {
-                Ok(manager) => {
-                    let plugins = manager.list_plugins_with_status();
-                    if plugins.is_empty() {
-                        println!("No plugins installed.");
-                    } else {
-                        println!("Installed plugins:");
-                        for (name, enabled, info) in plugins {
-                            let status = if enabled { "✓" } else { "✗" };
-                            println!("  {} {} v{} - {}", status, name, info.version, info.description);
+        PluginCommands::List => match PluginManager::new("plugins/") {
+            Ok(manager) => {
+                let plugins = manager.list_plugins_with_status();
+                if plugins.is_empty() {
+                    println!("No plugins installed.");
+                } else {
+                    println!("Installed plugins:");
+                    for (name, enabled, info) in plugins {
+                        let status = if enabled { "✓" } else { "✗" };
+                        println!(
+                            "  {} {} v{} - {}",
+                            status, name, info.version, info.description
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                std::process::exit(1);
+            }
+        },
+        PluginCommands::Install { plugin, version } => match PluginManager::new("plugins/") {
+            Ok(mut manager) => {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                match rt.block_on(manager.install_plugin(&plugin, version.as_deref())) {
+                    Ok(_) => println!("✓ Plugin installed successfully"),
+                    Err(e) => {
+                        eprintln!("[ERROR] Failed to install plugin: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                std::process::exit(1);
+            }
+        },
+        PluginCommands::Uninstall { plugin } => match PluginManager::new("plugins/") {
+            Ok(mut manager) => match manager.uninstall_plugin(&plugin) {
+                Ok(_) => println!("✓ Plugin uninstalled successfully"),
+                Err(e) => {
+                    eprintln!("[ERROR] Failed to uninstall plugin: {}", e);
+                    std::process::exit(1);
+                }
+            },
+            Err(e) => {
+                eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                std::process::exit(1);
+            }
+        },
+        PluginCommands::Search { query, tags } => match PluginManager::new("plugins/") {
+            Ok(mut manager) => {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                if let Err(e) = rt.block_on(manager.refresh_marketplace_cache()) {
+                    eprintln!("[WARNING] Failed to refresh marketplace: {}", e);
+                }
+
+                let results = manager.search_marketplace(&query, tags);
+                if results.is_empty() {
+                    println!("No plugins found matching your search.");
+                } else {
+                    println!("Found {} plugin(s):", results.len());
+                    for plugin in results {
+                        println!("\n📦 {} v{}", plugin.name, plugin.version);
+                        println!("   {}", plugin.description);
+                        println!("   Author: {}", plugin.author);
+                        println!("   Tags: {}", plugin.tags.join(", "));
+                        println!(
+                            "   ⭐ {} ({} downloads)",
+                            plugin.ratings, plugin.download_count
+                        );
+                        if plugin.verified {
+                            println!("   ✅ Verified");
                         }
                     }
                 }
-                Err(e) => {
-                    eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
-                    std::process::exit(1);
-                }
             }
-        }
-        PluginCommands::Install { plugin, version } => {
-            match PluginManager::new("plugins/") {
-                Ok(mut manager) => {
-                    let rt = tokio::runtime::Runtime::new().unwrap();
-                    match rt.block_on(manager.install_plugin(&plugin, version.as_deref())) {
-                        Ok(_) => println!("✓ Plugin installed successfully"),
-                        Err(e) => {
-                            eprintln!("[ERROR] Failed to install plugin: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
-                    std::process::exit(1);
-                }
+            Err(e) => {
+                eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                std::process::exit(1);
             }
-        }
-        PluginCommands::Uninstall { plugin } => {
-            match PluginManager::new("plugins/") {
-                Ok(mut manager) => {
-                    match manager.uninstall_plugin(&plugin) {
-                        Ok(_) => println!("✓ Plugin uninstalled successfully"),
-                        Err(e) => {
-                            eprintln!("[ERROR] Failed to uninstall plugin: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        PluginCommands::Search { query, tags } => {
-            match PluginManager::new("plugins/") {
-                Ok(mut manager) => {
-                    let rt = tokio::runtime::Runtime::new().unwrap();
-                    if let Err(e) = rt.block_on(manager.refresh_marketplace_cache()) {
-                        eprintln!("[WARNING] Failed to refresh marketplace: {}", e);
-                    }
-                    
-                    let results = manager.search_marketplace(&query, tags);
-                    if results.is_empty() {
-                        println!("No plugins found matching your search.");
-                    } else {
-                        println!("Found {} plugin(s):", results.len());
-                        for plugin in results {
-                            println!("\n📦 {} v{}", plugin.name, plugin.version);
-                            println!("   {}", plugin.description);
-                            println!("   Author: {}", plugin.author);
-                            println!("   Tags: {}", plugin.tags.join(", "));
-                            println!("   ⭐ {} ({} downloads)", plugin.ratings, plugin.download_count);
-                            if plugin.verified {
-                                println!("   ✅ Verified");
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
+        },
         PluginCommands::Info { plugin } => {
             match PluginManager::new("plugins/") {
                 Ok(manager) => {
@@ -804,15 +861,18 @@ fn handle_plugin_command(command: PluginCommands) {
                         println!("Description: {}", info.info.description);
                         println!("Author: {}", info.info.author);
                         println!("Tags: {}", info.info.tags.join(", "));
-                        
+
                         if !info.info.capabilities.is_empty() {
                             println!("\nCapabilities:");
                             for cap in &info.info.capabilities {
                                 println!("  - {}: {}", cap.name, cap.description);
-                                println!("    Input: {:?}, Output: {:?}", cap.input_type, cap.output_type);
+                                println!(
+                                    "    Input: {:?}, Output: {:?}",
+                                    cap.input_type, cap.output_type
+                                );
                             }
                         }
-                        
+
                         if !info.info.dependencies.is_empty() {
                             println!("\nDependencies:");
                             for dep in &info.info.dependencies {
@@ -820,7 +880,7 @@ fn handle_plugin_command(command: PluginCommands) {
                                 println!("  - {} v{}{}", dep.name, dep.version, optional);
                             }
                         }
-                        
+
                         // Show analytics
                         let analytics = manager.get_plugin_analytics(&plugin);
                         if !analytics.is_empty() {
@@ -829,7 +889,7 @@ fn handle_plugin_command(command: PluginCommands) {
                                 println!("  {}: {}", key, value);
                             }
                         }
-                        
+
                         // Show configuration
                         if let Some(config) = manager.get_plugin_config(&plugin) {
                             println!("\nConfiguration:");
@@ -850,43 +910,35 @@ fn handle_plugin_command(command: PluginCommands) {
                 }
             }
         }
-        PluginCommands::Toggle { plugin, enabled } => {
-            match PluginManager::new("plugins/") {
-                Ok(mut manager) => {
-                    match manager.set_plugin_enabled(&plugin, enabled) {
-                        Ok(_) => {
-                            let status = if enabled { "enabled" } else { "disabled" };
-                            println!("✓ Plugin '{}' {}", plugin, status);
-                        }
-                        Err(e) => {
-                            eprintln!("[ERROR] Failed to toggle plugin: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
+        PluginCommands::Toggle { plugin, enabled } => match PluginManager::new("plugins/") {
+            Ok(mut manager) => match manager.set_plugin_enabled(&plugin, enabled) {
+                Ok(_) => {
+                    let status = if enabled { "enabled" } else { "disabled" };
+                    println!("✓ Plugin '{}' {}", plugin, status);
                 }
                 Err(e) => {
-                    eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                    eprintln!("[ERROR] Failed to toggle plugin: {}", e);
                     std::process::exit(1);
                 }
+            },
+            Err(e) => {
+                eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                std::process::exit(1);
             }
-        }
-        PluginCommands::Reload { plugin } => {
-            match PluginManager::new("plugins/") {
-                Ok(mut manager) => {
-                    match manager.hot_reload_plugin(&plugin) {
-                        Ok(_) => println!("✓ Plugin '{}' reloaded successfully", plugin),
-                        Err(e) => {
-                            eprintln!("[ERROR] Failed to reload plugin: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
+        },
+        PluginCommands::Reload { plugin } => match PluginManager::new("plugins/") {
+            Ok(mut manager) => match manager.hot_reload_plugin(&plugin) {
+                Ok(_) => println!("✓ Plugin '{}' reloaded successfully", plugin),
                 Err(e) => {
-                    eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                    eprintln!("[ERROR] Failed to reload plugin: {}", e);
                     std::process::exit(1);
                 }
+            },
+            Err(e) => {
+                eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                std::process::exit(1);
             }
-        }
+        },
         PluginCommands::Config { plugin, key, value } => {
             match PluginManager::new("plugins/") {
                 Ok(mut manager) => {
@@ -896,11 +948,14 @@ fn handle_plugin_command(command: PluginCommands) {
                             Ok(v) => v,
                             Err(_) => serde_json::Value::String(value), // Fallback to string
                         };
-                        
+
                         config.settings.insert(key.clone(), json_value);
-                        
+
                         match manager.update_plugin_config(&plugin, config) {
-                            Ok(_) => println!("✓ Updated configuration '{}' for plugin '{}'", key, plugin),
+                            Ok(_) => println!(
+                                "✓ Updated configuration '{}' for plugin '{}'",
+                                key, plugin
+                            ),
                             Err(e) => {
                                 eprintln!("[ERROR] Failed to update config: {}", e);
                                 std::process::exit(1);
@@ -917,9 +972,20 @@ fn handle_plugin_command(command: PluginCommands) {
                 }
             }
         }
-        PluginCommands::Create { name, template, author, description } => {
+        PluginCommands::Create {
+            name,
+            template,
+            author,
+            description,
+        } => {
             let plugin_template = PluginTemplate::from_string(&template);
-            match PluginDevTools::create_plugin(&name, plugin_template, author.as_deref(), description.as_deref(), "plugins/") {
+            match PluginDevTools::create_plugin(
+                &name,
+                plugin_template,
+                author.as_deref(),
+                description.as_deref(),
+                "plugins/",
+            ) {
                 Ok(_) => println!("✓ Created new plugin: {}", name),
                 Err(e) => {
                     eprintln!("[ERROR] Failed to create plugin: {}", e);
@@ -945,15 +1011,13 @@ fn handle_plugin_command(command: PluginCommands) {
                 }
             }
         }
-        PluginCommands::Validate { path } => {
-            match PluginDevTools::validate_plugin(&path) {
-                Ok(_) => println!("✓ Plugin validation passed"),
-                Err(e) => {
-                    eprintln!("[ERROR] Validation failed: {}", e);
-                    std::process::exit(1);
-                }
+        PluginCommands::Validate { path } => match PluginDevTools::validate_plugin(&path) {
+            Ok(_) => println!("✓ Plugin validation passed"),
+            Err(e) => {
+                eprintln!("[ERROR] Validation failed: {}", e);
+                std::process::exit(1);
             }
-        }
+        },
         PluginCommands::Package { path, output } => {
             match PluginDevTools::package_plugin(&path, output.as_deref()) {
                 Ok(_) => println!("✓ Plugin packaged successfully"),
@@ -963,36 +1027,40 @@ fn handle_plugin_command(command: PluginCommands) {
                 }
             }
         }
-        PluginCommands::RefreshMarketplace => {
-            match PluginManager::new("plugins/") {
-                Ok(mut manager) => {
-                    let rt = tokio::runtime::Runtime::new().unwrap();
-                    match rt.block_on(manager.refresh_marketplace_cache()) {
-                        Ok(_) => println!("✓ Marketplace cache refreshed"),
-                        Err(e) => {
-                            eprintln!("[ERROR] Failed to refresh marketplace: {}", e);
-                            std::process::exit(1);
-                        }
+        PluginCommands::RefreshMarketplace => match PluginManager::new("plugins/") {
+            Ok(mut manager) => {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                match rt.block_on(manager.refresh_marketplace_cache()) {
+                    Ok(_) => println!("✓ Marketplace cache refreshed"),
+                    Err(e) => {
+                        eprintln!("[ERROR] Failed to refresh marketplace: {}", e);
+                        std::process::exit(1);
                     }
                 }
-                Err(e) => {
-                    eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
-                    std::process::exit(1);
-                }
             }
-        }
-        PluginCommands::Hook { plugin, events, callback } => {
-            match PluginManager::new("plugins/") {
-                Ok(mut manager) => {
-                    manager.register_hook(plugin.clone(), events.clone(), callback.clone());
-                    println!("✓ Registered hook for plugin '{}' to listen for events: {}", plugin, events.join(", "));
-                    println!("  Callback function: {}", callback);
-                }
-                Err(e) => {
-                    eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
-                    std::process::exit(1);
-                }
+            Err(e) => {
+                eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                std::process::exit(1);
             }
-        }
+        },
+        PluginCommands::Hook {
+            plugin,
+            events,
+            callback,
+        } => match PluginManager::new("plugins/") {
+            Ok(mut manager) => {
+                manager.register_hook(plugin.clone(), events.clone(), callback.clone());
+                println!(
+                    "✓ Registered hook for plugin '{}' to listen for events: {}",
+                    plugin,
+                    events.join(", ")
+                );
+                println!("  Callback function: {}", callback);
+            }
+            Err(e) => {
+                eprintln!("[ERROR] Failed to initialize plugin manager: {}", e);
+                std::process::exit(1);
+            }
+        },
     }
-} 
+}

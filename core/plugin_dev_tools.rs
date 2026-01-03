@@ -1,7 +1,7 @@
-use std::path::Path;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Plugin development CLI tools
 #[derive(Debug, Parser)]
@@ -197,55 +197,59 @@ impl PluginDevTools {
     ) -> Result<()> {
         let plugin_dir = Path::new(output_dir).join(name);
         std::fs::create_dir_all(&plugin_dir)?;
-        
+
         // Generate manifest
         let manifest = Self::generate_manifest(name, template.clone(), author, description)?;
         let manifest_path = plugin_dir.join("plugin.toml");
         let manifest_content = toml::to_string_pretty(&manifest)?;
         std::fs::write(manifest_path, manifest_content)?;
-        
+
         // Generate Cargo.toml
         let cargo_toml = Self::generate_cargo_toml(name, &manifest)?;
         let cargo_path = plugin_dir.join("Cargo.toml");
         std::fs::write(cargo_path, cargo_toml)?;
-        
+
         // Create src directory
         let src_dir = plugin_dir.join("src");
         std::fs::create_dir_all(&src_dir)?;
-        
+
         // Generate main source file
         let lib_rs = Self::generate_plugin_source(name, &template)?;
         let lib_path = src_dir.join("lib.rs");
         std::fs::write(lib_path, lib_rs)?;
-        
+
         // Generate example
         let examples_dir = plugin_dir.join("examples");
         std::fs::create_dir_all(&examples_dir)?;
         let example_rs = Self::generate_example(name)?;
         let example_path = examples_dir.join("basic.rs");
         std::fs::write(example_path, example_rs)?;
-        
+
         // Generate tests
         let tests_dir = plugin_dir.join("tests");
         std::fs::create_dir_all(&tests_dir)?;
         let test_rs = Self::generate_tests(name)?;
         let test_path = tests_dir.join("integration_tests.rs");
         std::fs::write(test_path, test_rs)?;
-        
+
         // Generate README
         let readme = Self::generate_readme(name, &manifest)?;
         let readme_path = plugin_dir.join("README.md");
         std::fs::write(readme_path, readme)?;
-        
-        println!("✓ Created new plugin '{}' in {}", name, plugin_dir.display());
+
+        println!(
+            "✓ Created new plugin '{}' in {}",
+            name,
+            plugin_dir.display()
+        );
         println!("Next steps:");
         println!("  cd {}", plugin_dir.display());
         println!("  lao-plugin build");
         println!("  lao-plugin test");
-        
+
         Ok(())
     }
-    
+
     /// Generate plugin manifest
     fn generate_manifest(
         name: &str,
@@ -335,7 +339,7 @@ impl PluginDevTools {
                 vec!["read_files".to_string()],
             ),
         };
-        
+
         Ok(PluginManifest {
             name: name.to_string(),
             version: "0.1.0".to_string(),
@@ -356,7 +360,7 @@ impl PluginDevTools {
             resources: PluginResourceSpec::default(),
         })
     }
-    
+
     /// Generate Cargo.toml
     fn generate_cargo_toml(name: &str, manifest: &PluginManifest) -> Result<String> {
         let cargo_toml = format!(
@@ -393,14 +397,15 @@ path = "examples/basic.rs"
             manifest.license.as_ref().unwrap_or(&"MIT".to_string()),
             name.replace("-", "_")
         );
-        
+
         Ok(cargo_toml)
     }
-    
+
     /// Generate plugin source code
     fn generate_plugin_source(name: &str, template: &PluginTemplate) -> Result<String> {
         let _lib_name = name.replace("-", "_");
-        let plugin_name_pascal = name.split('-')
+        let plugin_name_pascal = name
+            .split('-')
             .map(|s| {
                 let mut chars = s.chars();
                 match chars.next() {
@@ -409,7 +414,7 @@ path = "examples/basic.rs"
                 }
             })
             .collect::<String>();
-        
+
         let (process_function, additional_deps) = match template {
             PluginTemplate::AiModel => (
                 r#"    // AI model inference logic
@@ -488,7 +493,7 @@ path = "examples/basic.rs"
                 "",
             ),
         };
-        
+
         let source = format!(
             r#"//! {} Plugin for LAO
 //! 
@@ -773,10 +778,10 @@ mod tests {{
             name,
             plugin_name_pascal
         );
-        
+
         Ok(source)
     }
-    
+
     /// Generate example code
     fn generate_example(name: &str) -> Result<String> {
         let example = format!(
@@ -828,10 +833,10 @@ fn test_error_handling() {{
             name.replace("-", "_"),
             name
         );
-        
+
         Ok(example)
     }
-    
+
     /// Generate test code
     fn generate_tests(name: &str) -> Result<String> {
         let test_code = format!(
@@ -966,10 +971,10 @@ mod performance_tests {{
             name,
             name.replace("-", "_")
         );
-        
+
         Ok(test_code)
     }
-    
+
     /// Generate README documentation
     fn generate_readme(name: &str, manifest: &PluginManifest) -> Result<String> {
         let readme = format!(
@@ -1108,7 +1113,8 @@ lao-plugin validate
             name,
             manifest.name,
             manifest.name,
-            manifest.capabilities
+            manifest
+                .capabilities
                 .iter()
                 .map(|cap| format!("- **{}**: {}", cap.name, cap.description))
                 .collect::<Vec<_>>()
@@ -1117,10 +1123,10 @@ lao-plugin validate
             manifest.author,
             manifest.version
         );
-        
+
         Ok(readme)
     }
-    
+
     /// Build a plugin
     pub fn build_plugin(path: &str, release: bool) -> Result<()> {
         let build_cmd = if release {
@@ -1128,13 +1134,13 @@ lao-plugin validate
         } else {
             "cargo build"
         };
-        
+
         let output = std::process::Command::new("sh")
             .arg("-c")
             .arg(build_cmd)
             .current_dir(path)
             .output()?;
-        
+
         if output.status.success() {
             println!("✓ Plugin built successfully");
             if release {
@@ -1146,10 +1152,10 @@ lao-plugin validate
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(anyhow!("Build failed: {}", stderr));
         }
-        
+
         Ok(())
     }
-    
+
     /// Test a plugin
     pub fn test_plugin(path: &str, input: Option<&str>) -> Result<()> {
         // Run cargo tests
@@ -1157,28 +1163,28 @@ lao-plugin validate
             .arg("test")
             .current_dir(path)
             .output()?;
-        
+
         if !test_output.status.success() {
             let stderr = String::from_utf8_lossy(&test_output.stderr);
             return Err(anyhow!("Tests failed: {}", stderr));
         }
-        
+
         println!("✓ All tests passed");
-        
+
         // If input provided, run functional test
         if let Some(test_input) = input {
             println!("Running functional test with input: {}", test_input);
             // In a real implementation, you'd load and test the plugin here
             println!("✓ Functional test passed");
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate plugin
     pub fn validate_plugin(path: &str) -> Result<()> {
         let plugin_path = Path::new(path);
-        
+
         // Check for required files
         let required_files = vec!["Cargo.toml", "plugin.toml", "src/lib.rs"];
         for file in required_files {
@@ -1187,40 +1193,40 @@ lao-plugin validate
                 return Err(anyhow!("Missing required file: {}", file));
             }
         }
-        
+
         // Validate manifest
         let manifest_path = plugin_path.join("plugin.toml");
         let manifest_content = std::fs::read_to_string(manifest_path)?;
         let _manifest: PluginManifest = toml::from_str(&manifest_content)
             .map_err(|e| anyhow!("Invalid plugin manifest: {}", e))?;
-        
+
         // Run cargo check
         let check_output = std::process::Command::new("cargo")
             .arg("check")
             .current_dir(path)
             .output()?;
-        
+
         if !check_output.status.success() {
             let stderr = String::from_utf8_lossy(&check_output.stderr);
             return Err(anyhow!("Code validation failed: {}", stderr));
         }
-        
+
         println!("✓ Plugin validation passed");
         Ok(())
     }
-    
+
     /// Package plugin for distribution
     pub fn package_plugin(path: &str, output: Option<&str>) -> Result<()> {
         // Build in release mode first
         Self::build_plugin(path, true)?;
-        
+
         let _plugin_path = Path::new(path);
         let package_name = output.unwrap_or("plugin.tar.gz");
-        
+
         // Create package (simplified - in real implementation you'd use tar/zip)
         println!("Creating package: {}", package_name);
         println!("✓ Plugin packaged successfully");
-        
+
         Ok(())
     }
 }

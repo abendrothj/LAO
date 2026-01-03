@@ -27,7 +27,7 @@ pub struct PluginMetadata {
     pub description: *const c_char,
     pub author: *const c_char,
     pub dependencies: *const c_char, // JSON array of dependency strings
-    pub tags: *const c_char, // JSON array of tag strings
+    pub tags: *const c_char,         // JSON array of tag strings
     pub input_schema: *const c_char, // JSON schema for input validation
     pub output_schema: *const c_char, // JSON schema for output validation
     pub capabilities: *const c_char, // JSON array of capabilities
@@ -114,33 +114,33 @@ impl PluginInfo {
                 }
             }
         }
-        
+
         let name = safe_cstr_to_string(metadata.name);
         let version = safe_cstr_to_string(metadata.version);
         let description = safe_cstr_to_string(metadata.description);
         let author = safe_cstr_to_string(metadata.author);
-        
+
         let dependencies = if !metadata.dependencies.is_null() {
             let deps_str = safe_cstr_to_string(metadata.dependencies);
             serde_json::from_str::<Vec<PluginDependency>>(&deps_str).unwrap_or_default()
         } else {
             Vec::new()
         };
-        
+
         let tags = if !metadata.tags.is_null() {
             let tags_str = safe_cstr_to_string(metadata.tags);
             serde_json::from_str::<Vec<String>>(&tags_str).unwrap_or_default()
         } else {
             Vec::new()
         };
-        
+
         let capabilities = if !metadata.capabilities.is_null() {
             let caps_str = safe_cstr_to_string(metadata.capabilities);
             serde_json::from_str::<Vec<PluginCapability>>(&caps_str).unwrap_or_default()
         } else {
             Vec::new()
         };
-        
+
         let input_schema = if !metadata.input_schema.is_null() {
             let schema_str = safe_cstr_to_string(metadata.input_schema);
             if schema_str.is_empty() {
@@ -151,7 +151,7 @@ impl PluginInfo {
         } else {
             None
         };
-        
+
         let output_schema = if !metadata.output_schema.is_null() {
             let schema_str = safe_cstr_to_string(metadata.output_schema);
             if schema_str.is_empty() {
@@ -162,7 +162,7 @@ impl PluginInfo {
         } else {
             None
         };
-        
+
         PluginInfo {
             name,
             version,
@@ -175,4 +175,4 @@ impl PluginInfo {
             output_schema,
         }
     }
-} 
+}

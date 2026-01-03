@@ -1,7 +1,7 @@
+use crate::workflow_state::{WorkflowState, WorkflowStatus};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::workflow_state::{WorkflowState, WorkflowStatus};
 
 pub struct WorkflowStateManager {
     state_dir: PathBuf,
@@ -12,12 +12,12 @@ impl WorkflowStateManager {
     pub fn new<P: AsRef<Path>>(state_dir: P) -> std::io::Result<Self> {
         let state_dir = state_dir.as_ref().to_path_buf();
         fs::create_dir_all(&state_dir)?;
-        
+
         let mut manager = Self {
             state_dir,
             states: HashMap::new(),
         };
-        
+
         manager.load_all_states()?;
         Ok(manager)
     }
@@ -36,7 +36,7 @@ impl WorkflowStateManager {
         if !file_path.exists() {
             return Ok(None);
         }
-        
+
         let json = fs::read_to_string(file_path)?;
         let state: WorkflowState = serde_json::from_str(&json)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -59,7 +59,12 @@ impl WorkflowStateManager {
     pub fn list_active_workflows(&self) -> Vec<&WorkflowState> {
         self.states
             .values()
-            .filter(|state| matches!(state.status, WorkflowStatus::Running | WorkflowStatus::Pending))
+            .filter(|state| {
+                matches!(
+                    state.status,
+                    WorkflowStatus::Running | WorkflowStatus::Pending
+                )
+            })
             .collect()
     }
 
@@ -78,7 +83,7 @@ impl WorkflowStateManager {
         for entry in fs::read_dir(&self.state_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(filename) = path.file_stem().and_then(|s| s.to_str()) {
                     if let Ok(Some(state)) = self.load_state(filename) {
@@ -87,19 +92,25 @@ impl WorkflowStateManager {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     pub fn cleanup_old_states(&mut self, max_age_hours: u64) -> std::io::Result<usize> {
-        let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(max_age_hours * 3600);
+        let cutoff =
+            std::time::SystemTime::now() - std::time::Duration::from_secs(max_age_hours * 3600);
         let mut removed_count = 0;
-        
-        let to_remove: Vec<String> = self.states
+
+        let to_remove: Vec<String> = self
+            .states
             .values()
             .filter(|state| {
-                matches!(state.status, WorkflowStatus::Completed | WorkflowStatus::Failed | WorkflowStatus::Cancelled)
-                && state.completed_at.map_or(false, |completed| completed < cutoff)
+                matches!(
+                    state.status,
+                    WorkflowStatus::Completed | WorkflowStatus::Failed | WorkflowStatus::Cancelled
+                ) && state
+                    .completed_at
+                    .map_or(false, |completed| completed < cutoff)
             })
             .map(|state| state.workflow_id.clone())
             .collect();

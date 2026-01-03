@@ -1,4 +1,4 @@
-use lao_plugin_api::{PluginInput, PluginOutput, PluginVTable, PluginVTablePtr, PluginMetadata};
+use lao_plugin_api::{PluginInput, PluginMetadata, PluginOutput, PluginVTable, PluginVTablePtr};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
@@ -8,7 +8,9 @@ unsafe extern "C" fn name() -> *const c_char {
 
 unsafe extern "C" fn run(input: *const PluginInput) -> PluginOutput {
     if input.is_null() {
-        return PluginOutput { text: std::ptr::null_mut() };
+        return PluginOutput {
+            text: std::ptr::null_mut(),
+        };
     }
     let c_str = CStr::from_ptr((*input).text);
     let prompt = c_str.to_string_lossy();
@@ -23,7 +25,11 @@ unsafe extern "C" fn free_output(output: PluginOutput) {
     }
 }
 
-unsafe extern "C" fn run_with_buffer(_input: *const lao_plugin_api::PluginInput, _buffer: *mut std::os::raw::c_char, _buffer_len: usize) -> usize {
+unsafe extern "C" fn run_with_buffer(
+    _input: *const lao_plugin_api::PluginInput,
+    _buffer: *mut std::os::raw::c_char,
+    _buffer_len: usize,
+) -> usize {
     0 // Not implemented for LMStudioPlugin
 }
 
@@ -35,7 +41,7 @@ unsafe extern "C" fn get_metadata() -> PluginMetadata {
     static AUTHOR: &[u8] = b"LAO Team\0";
     static TAGS: &[u8] = b"[\"llm\", \"lmstudio\", \"text-generation\"]\0";
     static CAPABILITIES: &[u8] = b"[{\"name\":\"text-generation\",\"description\":\"Generate text using LM Studio\",\"input_type\":\"Text\",\"output_type\":\"Text\"}]\0";
-    
+
     PluginMetadata {
         name: NAME.as_ptr() as *const c_char,
         version: VERSION.as_ptr() as *const c_char,
@@ -78,4 +84,4 @@ pub static PLUGIN_VTABLE: lao_plugin_api::PluginVTable = lao_plugin_api::PluginV
 #[no_mangle]
 pub extern "C" fn plugin_vtable() -> PluginVTablePtr {
     &PLUGIN_VTABLE
-} 
+}

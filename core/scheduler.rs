@@ -1,7 +1,7 @@
+use crate::state_manager::WorkflowStateManager;
+use crate::workflow_state::{WorkflowSchedule, WorkflowState, WorkflowStatus};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
-use crate::workflow_state::{WorkflowState, WorkflowStatus, WorkflowSchedule};
-use crate::state_manager::WorkflowStateManager;
 
 pub struct WorkflowScheduler {
     state_manager: WorkflowStateManager,
@@ -32,30 +32,33 @@ impl WorkflowScheduler {
         schedule: WorkflowSchedule,
     ) -> Result<(), String> {
         let next_run = self.calculate_next_run(&schedule)?;
-        
+
         let scheduled = ScheduledWorkflow {
             workflow_path,
             schedule: schedule.clone(),
             last_run: None,
             next_run,
         };
-        
-        self.scheduled_workflows.insert(workflow_id.clone(), scheduled);
-        
+
+        self.scheduled_workflows
+            .insert(workflow_id.clone(), scheduled);
+
         // Create a scheduled workflow state
         let mut state = WorkflowState::new(workflow_id, "Scheduled Workflow".to_string(), 0);
         state.status = WorkflowStatus::Scheduled;
         state.schedule = Some(schedule);
-        
-        self.state_manager.save_state(&state)
+
+        self.state_manager
+            .save_state(&state)
             .map_err(|e| format!("Failed to save scheduled workflow state: {}", e))?;
-        
+
         Ok(())
     }
 
     pub fn unschedule_workflow(&mut self, workflow_id: &str) -> Result<(), String> {
         self.scheduled_workflows.remove(workflow_id);
-        self.state_manager.delete_state(workflow_id)
+        self.state_manager
+            .delete_state(workflow_id)
             .map_err(|e| format!("Failed to delete workflow state: {}", e))?;
         Ok(())
     }
@@ -78,16 +81,16 @@ impl WorkflowScheduler {
                 return Ok(());
             }
         };
-        
+
         // Calculate next run time
         let next_run = self.calculate_next_run(&schedule)?;
-        
+
         // Update the scheduled workflow
         if let Some(scheduled) = self.scheduled_workflows.get_mut(workflow_id) {
             scheduled.last_run = Some(SystemTime::now());
             scheduled.next_run = next_run;
             scheduled.schedule.run_count += 1;
-            
+
             // Check if max runs reached
             if let Some(max_runs) = max_runs {
                 if scheduled.schedule.run_count >= max_runs {
@@ -120,17 +123,20 @@ impl WorkflowScheduler {
         // Simple cron parser for common patterns
         // Format: "interval:minutes" or "daily:HH:MM" or "weekly:day:HH:MM"
         let parts: Vec<&str> = cron_expr.split(':').collect();
-        
+
         match parts.as_slice() {
             ["interval", minutes_str] => {
-                let minutes: u64 = minutes_str.parse()
+                let minutes: u64 = minutes_str
+                    .parse()
                     .map_err(|_| format!("Invalid interval minutes: {}", minutes_str))?;
                 Ok(SystemTime::now() + Duration::from_secs(minutes * 60))
             }
             ["daily", hour_str, minute_str] => {
-                let _hour: u32 = hour_str.parse()
+                let _hour: u32 = hour_str
+                    .parse()
                     .map_err(|_| format!("Invalid hour: {}", hour_str))?;
-                let _minute: u32 = minute_str.parse()
+                let _minute: u32 = minute_str
+                    .parse()
                     .map_err(|_| format!("Invalid minute: {}", minute_str))?;
                 // Simplified: schedule for next day at same time
                 Ok(SystemTime::now() + Duration::from_secs(24 * 3600))
@@ -139,7 +145,7 @@ impl WorkflowScheduler {
                 // Simplified: schedule for next week
                 Ok(SystemTime::now() + Duration::from_secs(7 * 24 * 3600))
             }
-            _ => Err(format!("Invalid cron expression format: {}", cron_expr))
+            _ => Err(format!("Invalid cron expression format: {}", cron_expr)),
         }
     }
 
@@ -147,7 +153,10 @@ impl WorkflowScheduler {
         self.state_manager.cleanup_old_states(max_age_hours)
     }
 
-    pub fn get_workflow_history(&self, workflow_id: &str) -> std::io::Result<Option<WorkflowState>> {
+    pub fn get_workflow_history(
+        &self,
+        workflow_id: &str,
+    ) -> std::io::Result<Option<WorkflowState>> {
         self.state_manager.load_state(workflow_id)
     }
 
