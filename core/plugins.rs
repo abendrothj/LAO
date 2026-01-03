@@ -15,7 +15,11 @@ pub struct PluginInstance {
 }
 
 impl PluginInstance {
-    pub fn new(library: Library, vtable: PluginVTablePtr) -> Result<Self, String> {
+    /// # Safety
+    ///
+    /// This function is unsafe because it dereferences the raw `vtable` pointer to check metadata.
+    /// The caller must ensure that `vtable` is a valid pointer to a `PluginVTable`.
+    pub unsafe fn new(library: Library, vtable: PluginVTablePtr) -> Result<Self, String> {
         unsafe {
             println!("[DEBUG] Creating PluginInstance with vtable: {:?}", vtable);
 
@@ -68,6 +72,12 @@ pub struct PluginRegistry {
     pub plugins: HashMap<String, PluginInstance>,
     pub plugin_versions: HashMap<String, Vec<String>>, // name -> versions
     pub plugin_dependencies: HashMap<String, Vec<PluginDependency>>,
+}
+
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PluginRegistry {
@@ -184,7 +194,7 @@ impl PluginRegistry {
         // Track versions
         self.plugin_versions
             .entry(name.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(version);
 
         // Track dependencies

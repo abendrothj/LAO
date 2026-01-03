@@ -1,9 +1,9 @@
-use lao_plugin_api::{PluginInput, PluginMetadata, PluginOutput, PluginVTable, PluginVTablePtr};
+use lao_plugin_api::{PluginInput, PluginMetadata, PluginOutput, PluginVTablePtr};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
 unsafe extern "C" fn name() -> *const c_char {
-    b"LMStudioPlugin\0".as_ptr() as *const c_char
+    c"LMStudioPlugin".as_ptr()
 }
 
 unsafe extern "C" fn run(input: *const PluginInput) -> PluginOutput {

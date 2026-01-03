@@ -36,32 +36,33 @@ pub fn show(ui: &mut Ui, state_arc: &Arc<Mutex<BackendState>>) {
 
             ui.add_space(5.0);
 
-            if ui.add(egui::Button::new("▶️ Run")).clicked() {
-                if !state.workflow_path.is_empty() && !state.is_running {
-                    if let Some(ref graph) = state.graph {
-                        // Reset node statuses before execution
-                        let mut graph_clone = graph.clone();
-                        for node in &mut graph_clone.nodes {
-                            node.status = "pending".to_string();
-                            node.message = None;
-                            node.output = None;
-                            node.error = None;
-                            node.attempt = 0;
-                        }
-                        state.graph = Some(graph_clone);
+            if ui.add(egui::Button::new("▶️ Run")).clicked()
+                && !state.workflow_path.is_empty()
+                && !state.is_running
+            {
+                if let Some(ref graph) = state.graph {
+                    // Reset node statuses before execution
+                    let mut graph_clone = graph.clone();
+                    for node in &mut graph_clone.nodes {
+                        node.status = "pending".to_string();
+                        node.message = None;
+                        node.output = None;
+                        node.error = None;
+                        node.attempt = 0;
                     }
-
-                    let path = state.workflow_path.clone();
-                    // We need to clone the arc to pass it to the stream
-                    // But we have the lock right now.
-                    // run_workflow_stream spawns a thread, so it needs the Arc.
-                    let state_ref = Arc::clone(state_arc);
-                    // Drop lock before running
-                    drop(state);
-                    let _ = run_workflow_stream(path, false, state_ref);
-                    return; // Return early since we dropped state and don't want to use it again
+                    state.graph = Some(graph_clone);
                 }
+
+                let path = state.workflow_path.clone();
+                // We need to clone the arc to pass it to the stream
+                // But we have the lock right now.
+                // run_workflow_stream spawns a thread, so it needs the Arc.
+                let state_ref = Arc::clone(state_arc);
+                // Drop lock before running
+                drop(state);
+                let _ = run_workflow_stream(path, false, state_ref);
             }
+
             // Re-acquire lock if needed or just continue if we didn't drop
 
             // To handle the drop logic cleanly, we might want to split the "Run" logic
@@ -115,40 +116,42 @@ pub fn show(ui: &mut Ui, state_arc: &Arc<Mutex<BackendState>>) {
 
                 ui.add_space(5.0);
 
-                if ui.add(egui::Button::new("▶️ Run")).clicked() {
-                    if !state.workflow_path.is_empty() && !state.is_running {
-                        if let Some(ref graph) = state.graph {
-                            // Reset node statuses before execution
-                            let mut graph_clone = graph.clone();
-                            for node in &mut graph_clone.nodes {
-                                node.status = "pending".to_string();
-                                node.message = None;
-                                node.output = None;
-                                node.error = None;
-                                node.attempt = 0;
-                            }
-                            state.graph = Some(graph_clone);
+                if ui.add(egui::Button::new("▶️ Run")).clicked()
+                    && !state.workflow_path.is_empty()
+                    && !state.is_running
+                {
+                    if let Some(ref graph) = state.graph {
+                        // Reset node statuses before execution
+                        let mut graph_clone = graph.clone();
+                        for node in &mut graph_clone.nodes {
+                            node.status = "pending".to_string();
+                            node.message = None;
+                            node.output = None;
+                            node.error = None;
+                            node.attempt = 0;
                         }
-                        should_run = true;
+                        state.graph = Some(graph_clone);
                     }
+                    should_run = true;
                 }
 
-                if ui.add(egui::Button::new("⚡ Run Parallel")).clicked() {
-                    if !state.workflow_path.is_empty() && !state.is_running {
-                        if let Some(ref graph) = state.graph {
-                            // Reset node statuses before execution
-                            let mut graph_clone = graph.clone();
-                            for node in &mut graph_clone.nodes {
-                                node.status = "pending".to_string();
-                                node.message = None;
-                                node.output = None;
-                                node.error = None;
-                                node.attempt = 0;
-                            }
-                            state.graph = Some(graph_clone);
+                if ui.add(egui::Button::new("⚡ Run Parallel")).clicked()
+                    && !state.workflow_path.is_empty()
+                    && !state.is_running
+                {
+                    if let Some(ref graph) = state.graph {
+                        // Reset node statuses before execution
+                        let mut graph_clone = graph.clone();
+                        for node in &mut graph_clone.nodes {
+                            node.status = "pending".to_string();
+                            node.message = None;
+                            node.output = None;
+                            node.error = None;
+                            node.attempt = 0;
                         }
-                        should_run_parallel = true;
+                        state.graph = Some(graph_clone);
                     }
+                    should_run_parallel = true;
                 }
             });
 

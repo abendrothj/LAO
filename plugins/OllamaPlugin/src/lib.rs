@@ -1,5 +1,5 @@
 use anyhow::Result;
-use lao_plugin_api::{PluginInput, PluginOutput, PluginVTable, PluginVTablePtr};
+use lao_plugin_api::{PluginInput, PluginOutput, PluginVTablePtr};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::ffi::{CStr, CString};

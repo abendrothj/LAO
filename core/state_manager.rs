@@ -110,7 +110,7 @@ impl WorkflowStateManager {
                     WorkflowStatus::Completed | WorkflowStatus::Failed | WorkflowStatus::Cancelled
                 ) && state
                     .completed_at
-                    .map_or(false, |completed| completed < cutoff)
+                    .is_some_and(|completed| completed < cutoff)
             })
             .map(|state| state.workflow_id.clone())
             .collect();

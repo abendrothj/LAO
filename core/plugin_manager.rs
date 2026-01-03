@@ -238,7 +238,7 @@ impl PluginManager {
         // Extract plugin name from URL
         let name = url
             .split('/')
-            .last()
+            .next_back()
             .and_then(|s| s.split('.').next())
             .unwrap_or("unknown_plugin");
 

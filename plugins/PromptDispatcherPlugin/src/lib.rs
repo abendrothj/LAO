@@ -1,11 +1,11 @@
-use lao_plugin_api::{PluginInput, PluginMetadata, PluginOutput, PluginVTable, PluginVTablePtr};
+use lao_plugin_api::{PluginInput, PluginMetadata, PluginOutput, PluginVTablePtr};
 use serde_json::Value;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::process::Command;
 
 unsafe extern "C" fn name() -> *const c_char {
-    b"PromptDispatcherPlugin\0".as_ptr() as *const c_char
+    c"PromptDispatcherPlugin".as_ptr()
 }
 
 fn load_prompt_library() -> Option<Vec<(String, String)>> {

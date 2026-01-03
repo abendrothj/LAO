@@ -317,7 +317,7 @@ fn main() {
             let plugin_registry =
                 PluginRegistry::dynamic_registry(plugin_dir.to_str().unwrap_or("plugins"));
             println!("Available plugins:");
-            for (name, _plugin) in &plugin_registry.plugins {
+            for name in plugin_registry.plugins.keys() {
                 println!("- {}", name);
             }
         }
@@ -588,7 +588,7 @@ fn main() {
         } => {
             let workflow_id = format!(
                 "scheduled_{}",
-                uuid::Uuid::new_v4().to_string().replace("-", "")[..8].to_string()
+                &uuid::Uuid::new_v4().to_string().replace("-", "")[..8]
             );
 
             // Validate workflow exists

@@ -47,10 +47,12 @@ pub struct BackendState {
     pub error: String,
     pub plugins: Vec<UiPluginInfo>,
     pub live_logs: Vec<String>,
+    #[allow(dead_code)]
     pub selected_node: Option<String>,
     pub is_running: bool,
     pub execution_progress: f32,
     pub workflow_result: Option<WorkflowResult>,
+    #[allow(dead_code)]
     pub multimodal_files: Vec<UploadedFile>,
 }
 
@@ -90,6 +92,7 @@ impl Default for BackendState {
     }
 }
 
+#[allow(dead_code)]
 pub fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
@@ -379,9 +382,9 @@ pub fn save_workflow_yaml(graph: &WorkflowGraph, filename: &str) -> Result<(), S
             .nodes
             .iter()
             .map(|node| {
-                let mut deps = incoming.get(&node.id).cloned().unwrap_or_default();
+                let deps = incoming.get(&node.id).cloned().unwrap_or_default();
                 // input_from = first predecessor if any
-                let input_from = deps.get(0).cloned();
+                let input_from = deps.first().cloned();
                 // remaining predecessors are depends_on
                 let depends_on = if deps.len() > 1 {
                     Some(deps[1..].to_vec())
@@ -433,14 +436,14 @@ pub fn export_workflow_yaml(graph: &WorkflowGraph) -> Result<String, String> {
         node_to_step.insert(node.id.clone(), index);
     }
 
-    for (_step_index, node) in graph.nodes.iter().enumerate() {
+    for node in graph.nodes.iter() {
         yaml.push_str(&format!("- run: {}\n", node.run));
 
         // Add input_from and depends_on if this node has predecessors
         if let Some(preds) = incoming.get(&node.id) {
             if !preds.is_empty() {
                 // input_from = first predecessor (export order is influenced by UI piping selection)
-                if let Some(first) = preds.get(0) {
+                if let Some(first) = preds.first() {
                     if let Some(&idx) = node_to_step.get(first) {
                         yaml.push_str(&format!("  input_from: step{}\n", idx + 1));
                     }
@@ -474,6 +477,7 @@ pub fn export_workflow_yaml(graph: &WorkflowGraph) -> Result<String, String> {
 }
 
 // Handle file upload for multi-modal input
+#[allow(dead_code)]
 pub fn handle_file_upload(file_path: &str, original_name: &str) -> Result<UploadedFile, String> {
     let metadata = std::fs::metadata(file_path).map_err(|e| e.to_string())?;
     let size = metadata.len() as usize;
@@ -516,6 +520,7 @@ pub fn handle_file_upload(file_path: &str, original_name: &str) -> Result<Upload
 }
 
 // Get supported file types for upload
+#[allow(dead_code)]
 pub fn get_supported_file_types() -> Vec<&'static str> {
     vec![
         "audio/*", "image/*", "video/*", "text/*", ".wav", ".mp3", ".flac", ".m4a", ".jpg",
