@@ -1,22 +1,22 @@
 // --- Workflow Engine (Step 2) ---
-use std::fs;
-use std::process::Command;
+use lao_plugin_api::PluginInput;
 use std::collections::HashMap;
-use std::time::Instant;
-use std::{thread, time::Duration};
 use std::env as std_env;
 use std::ffi::CString;
-use lao_plugin_api::PluginInput;
-pub mod plugins;
-pub mod plugin_manager;
-pub mod plugin_dev_tools;
-pub mod workflow_state;
-pub mod state_manager;
-pub mod scheduler;
+use std::fs;
+use std::process::Command;
+use std::time::Instant;
+use std::{thread, time::Duration};
 pub mod cross_platform;
+pub mod plugin_dev_tools;
+pub mod plugin_manager;
+pub mod plugins;
+pub mod scheduler;
+pub mod state_manager;
+pub mod workflow_state;
 
-use plugins::*;
 use lao_plugin_api::{PluginInputType, PluginOutputType};
+use plugins::*;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Workflow {
@@ -84,6 +84,7 @@ pub struct DagNode {
 #[derive(Debug, serde::Serialize)]
 pub struct StepLog {
     pub step: usize,
+    pub step_id: String,
     pub runner: String,
     pub input: serde_yaml::Value,
     pub output: Option<String>,
@@ -135,9 +136,15 @@ pub fn run_model_runner(runner: &str, params: serde_yaml::Value) -> Result<Strin
         }
     }
     // Run the command and capture output
-    let output = cmd.output().map_err(|e| format!("Failed to run {runner}: {e}"))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to run {runner}: {e}"))?;
     if !output.status.success() {
-        return Err(format!("{} failed: {}", runner, String::from_utf8_lossy(&output.stderr)));
+        return Err(format!(
+            "{} failed: {}",
+            runner,
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
@@ -277,27 +284,27 @@ pub fn run_workflow_yaml(path: &str) -> Result<Vec<StepLog>, String> {
     let workflow = load_workflow_yaml(path)?;
     let dag = build_dag(&workflow.steps)?;
     let registry = PluginRegistry::default_registry();
-    
+
     // Validate workflow
     let errors = validate_workflow_types(&dag, &registry);
     if !errors.is_empty() {
         return Err(format!("Workflow validation failed: {:?}", errors));
     }
-    
+
     // Topological sort
     let execution_order = topo_sort(&dag)?;
-    
+
     let mut logs = Vec::new();
     let mut outputs: HashMap<String, String> = HashMap::new();
     let start_time = Instant::now();
-    
+
     for (step_idx, node_id) in execution_order.iter().enumerate() {
         let node = dag.iter().find(|n| &n.id == node_id).unwrap();
         let step = &node.step;
-        
+
         // Build input parameters
         let mut params = step.params.clone();
-        
+
         // Handle input_from: use output from referenced step as input
         if let Some(input_from) = &step.input_from {
             if let Some(step_output) = outputs.get(input_from) {
@@ -305,40 +312,60 @@ pub fn run_workflow_yaml(path: &str) -> Result<Vec<StepLog>, String> {
                 if let Some(mapping) = params.as_mapping_mut() {
                     mapping.insert(
                         serde_yaml::Value::String("input".to_string()),
-                        serde_yaml::Value::String(step_output.clone())
+                        serde_yaml::Value::String(step_output.clone()),
                     );
                 } else {
                     // Create new mapping if params wasn't a mapping
                     let mut new_mapping = serde_yaml::Mapping::new();
                     new_mapping.insert(
                         serde_yaml::Value::String("input".to_string()),
-                        serde_yaml::Value::String(step_output.clone())
+                        serde_yaml::Value::String(step_output.clone()),
                     );
                     params = serde_yaml::Value::Mapping(new_mapping);
                 }
             }
         }
-        
+
         substitute_params(&mut params, &outputs);
-        
+
         // Build plugin input
         let plugin_input = build_plugin_input(&params);
-        
+
         // Get plugin
-        let plugin = registry.get(&step.run)
+        let plugin = registry
+            .get(&step.run)
             .ok_or_else(|| format!("Plugin '{}' not found", step.run))?;
-        
+
         // Run with retries
         let mut last_error = None;
         let max_attempts = step.retries.unwrap_or(1) + 1;
-        
+
+        // Check if step should be executed based on conditions
+        let dependent_step = step.depends_on.as_ref().and_then(|deps| deps.first());
+        if !should_execute_step(step, &logs, dependent_step.map(|s| s.as_str())) {
+            logs.push(StepLog {
+                step: step_idx,
+                step_id: node_id.clone(),
+                runner: step.run.clone(),
+                input: params.clone(),
+                output: Some("skipped due to condition".to_string()),
+                error: None,
+                attempt: 1,
+                input_type: None,
+                output_type: None,
+                validation: Some("skipped".to_string()),
+            });
+            continue;
+        }
+
         for attempt in 1..=max_attempts {
             let _attempt_start = Instant::now();
-            
+
             // Check cache first
             let mut cache_status = None;
             if let Some(cache_key) = &step.cache_key {
-                let cache_dir = std_env::var("LAO_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
+                let cache_dir =
+                    std_env::var("LAO_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
                 let cache_path = format!("{}/{}.json", cache_dir, cache_key);
                 if let Ok(cached) = fs::read_to_string(&cache_path) {
                     if let Ok(cached_output) = serde_json::from_str::<String>(&cached) {
@@ -346,6 +373,7 @@ pub fn run_workflow_yaml(path: &str) -> Result<Vec<StepLog>, String> {
                         outputs.insert(node_id.clone(), cached_output.clone());
                         logs.push(StepLog {
                             step: step_idx,
+                            step_id: node_id.clone(),
                             runner: step.run.clone(),
                             input: params.clone(),
                             output: Some(cached_output),
@@ -359,21 +387,24 @@ pub fn run_workflow_yaml(path: &str) -> Result<Vec<StepLog>, String> {
                     }
                 }
             }
-            
+
             // Run plugin
             let result = unsafe { ((*plugin.vtable).run)(&plugin_input) };
-            let output_str = unsafe { 
-                std::ffi::CStr::from_ptr(result.text).to_string_lossy().to_string() 
+            let output_str = unsafe {
+                std::ffi::CStr::from_ptr(result.text)
+                    .to_string_lossy()
+                    .to_string()
             };
             unsafe { ((*plugin.vtable).free_output)(result) };
-            
+
             if !output_str.is_empty() && !output_str.contains("error") {
                 // Success
                 outputs.insert(node_id.clone(), output_str.clone());
-                
+
                 // Save to cache
                 if let Some(cache_key) = &step.cache_key {
-                    let cache_dir = std_env::var("LAO_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
+                    let cache_dir =
+                        std_env::var("LAO_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
                     fs::create_dir_all(&cache_dir).ok();
                     let cache_path = format!("{}/{}.json", cache_dir, cache_key);
                     if let Ok(cache_json) = serde_json::to_string(&output_str) {
@@ -381,9 +412,10 @@ pub fn run_workflow_yaml(path: &str) -> Result<Vec<StepLog>, String> {
                         cache_status = Some("saved".to_string());
                     }
                 }
-                
+
                 logs.push(StepLog {
                     step: step_idx,
+                    step_id: node_id.clone(),
                     runner: step.run.clone(),
                     input: params.clone(),
                     output: Some(output_str),
@@ -397,7 +429,7 @@ pub fn run_workflow_yaml(path: &str) -> Result<Vec<StepLog>, String> {
             } else {
                 // Error
                 last_error = Some(output_str);
-                
+
                 if attempt < max_attempts {
                     let retry_delay = step.retry_delay.unwrap_or(1000);
                     let delay = if attempt > 1 {
@@ -409,10 +441,11 @@ pub fn run_workflow_yaml(path: &str) -> Result<Vec<StepLog>, String> {
                 }
             }
         }
-        
+
         if let Some(error) = last_error {
             logs.push(StepLog {
                 step: step_idx,
+                step_id: node_id.clone(),
                 runner: step.run.clone(),
                 input: params.clone(),
                 output: None,
@@ -426,7 +459,7 @@ pub fn run_workflow_yaml(path: &str) -> Result<Vec<StepLog>, String> {
             // This allows tests to check for errors in the logs
         }
     }
-    
+
     let _duration = start_time.elapsed();
     Ok(logs)
 }
@@ -443,7 +476,10 @@ fn compute_default_cache_key(step: &WorkflowStep, plugin_version: &str) -> Strin
 }
 
 // Streaming runner with callback events
-pub fn run_workflow_yaml_with_callback<F>(path: &str, mut on_event: F) -> Result<Vec<StepLog>, String>
+pub fn run_workflow_yaml_with_callback<F>(
+    path: &str,
+    mut on_event: F,
+) -> Result<Vec<StepLog>, String>
 where
     F: FnMut(StepEvent) + Send,
 {
@@ -469,7 +505,8 @@ where
         substitute_params(&mut params, &outputs);
 
         let plugin_input = build_plugin_input(&params);
-        let plugin = registry.get(&step.run)
+        let plugin = registry
+            .get(&step.run)
             .ok_or_else(|| format!("Plugin '{}' not found", step.run))?;
 
         let mut last_error = None;
@@ -478,36 +515,50 @@ where
         // Check if step should be executed based on conditions
         let dependent_step = step.depends_on.as_ref().and_then(|deps| deps.first());
         if !should_execute_step(step, &logs, dependent_step.map(|s| s.as_str())) {
-            on_event(StepEvent { 
-                step: step_idx, 
-                step_id: node_id.clone(), 
-                runner: step.run.clone(), 
-                status: "skipped".to_string(), 
-                attempt: 1, 
-                message: Some("condition not met".to_string()), 
-                output: None, 
-                error: None 
+            on_event(StepEvent {
+                step: step_idx,
+                step_id: node_id.clone(),
+                runner: step.run.clone(),
+                status: "skipped".to_string(),
+                attempt: 1,
+                message: Some("condition not met".to_string()),
+                output: None,
+                error: None,
             });
-            logs.push(StepLog { 
-                step: step_idx, 
-                runner: step.run.clone(), 
-                input: params.clone(), 
-                output: Some("skipped due to condition".to_string()), 
-                error: None, 
-                attempt: 1, 
-                input_type: None, 
-                output_type: None, 
-                validation: Some("skipped".to_string()) 
+            logs.push(StepLog {
+                step: step_idx,
+                step_id: node_id.clone(),
+                runner: step.run.clone(),
+                input: params.clone(),
+                output: Some("skipped due to condition".to_string()),
+                error: None,
+                attempt: 1,
+                input_type: None,
+                output_type: None,
+                validation: Some("skipped".to_string()),
             });
             continue;
         }
 
-        on_event(StepEvent { step: step_idx, step_id: node_id.clone(), runner: step.run.clone(), status: "running".to_string(), attempt: 1, message: None, output: None, error: None });
+        on_event(StepEvent {
+            step: step_idx,
+            step_id: node_id.clone(),
+            runner: step.run.clone(),
+            status: "running".to_string(),
+            attempt: 1,
+            message: None,
+            output: None,
+            error: None,
+        });
 
         for attempt in 1..=max_attempts {
             // Check or compute cache key
             let mut cache_status = None;
-            let cache_key_effective = if let Some(k) = &step.cache_key { k.clone() } else { compute_default_cache_key(step, &plugin.info.version) };
+            let cache_key_effective = if let Some(k) = &step.cache_key {
+                k.clone()
+            } else {
+                compute_default_cache_key(step, &plugin.info.version)
+            };
             let cache_dir = std_env::var("LAO_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
             let cache_path = format!("{}/{}.json", cache_dir, cache_key_effective);
 
@@ -516,39 +567,115 @@ where
                     if let Ok(cached_output) = serde_json::from_str::<String>(&cached) {
                         cache_status = Some("cache".to_string());
                         outputs.insert(node_id.clone(), cached_output.clone());
-                        on_event(StepEvent { step: step_idx, step_id: node_id.clone(), runner: step.run.clone(), status: "cache".to_string(), attempt, message: Some("cache hit".to_string()), output: Some(cached_output.clone()), error: None });
-                        logs.push(StepLog { step: step_idx, runner: step.run.clone(), input: params.clone(), output: Some(cached_output), error: None, attempt, input_type: None, output_type: None, validation: cache_status });
+                        on_event(StepEvent {
+                            step: step_idx,
+                            step_id: node_id.clone(),
+                            runner: step.run.clone(),
+                            status: "cache".to_string(),
+                            attempt,
+                            message: Some("cache hit".to_string()),
+                            output: Some(cached_output.clone()),
+                            error: None,
+                        });
+                        logs.push(StepLog {
+                            step: step_idx,
+                            step_id: node_id.clone(),
+                            runner: step.run.clone(),
+                            input: params.clone(),
+                            output: Some(cached_output),
+                            error: None,
+                            attempt,
+                            input_type: None,
+                            output_type: None,
+                            validation: cache_status,
+                        });
                         break;
                     }
                 }
             }
 
             let result = unsafe { ((*plugin.vtable).run)(&plugin_input) };
-            let output_str = unsafe { std::ffi::CStr::from_ptr(result.text).to_string_lossy().to_string() };
+            let output_str = unsafe {
+                std::ffi::CStr::from_ptr(result.text)
+                    .to_string_lossy()
+                    .to_string()
+            };
             unsafe { ((*plugin.vtable).free_output)(result) };
 
             if !output_str.is_empty() && !output_str.contains("error") {
                 outputs.insert(node_id.clone(), output_str.clone());
                 if step.cache_key.is_some() {
                     fs::create_dir_all(&cache_dir).ok();
-                    let _ = fs::write(&cache_path, serde_json::to_string(&output_str).unwrap_or_default());
+                    let _ = fs::write(
+                        &cache_path,
+                        serde_json::to_string(&output_str).unwrap_or_default(),
+                    );
                 }
-                on_event(StepEvent { step: step_idx, step_id: node_id.clone(), runner: step.run.clone(), status: "success".to_string(), attempt, message: None, output: Some(output_str.clone()), error: None });
-                logs.push(StepLog { step: step_idx, runner: step.run.clone(), input: params.clone(), output: Some(output_str), error: None, attempt, input_type: None, output_type: None, validation: cache_status });
+                on_event(StepEvent {
+                    step: step_idx,
+                    step_id: node_id.clone(),
+                    runner: step.run.clone(),
+                    status: "success".to_string(),
+                    attempt,
+                    message: None,
+                    output: Some(output_str.clone()),
+                    error: None,
+                });
+                logs.push(StepLog {
+                    step: step_idx,
+                    step_id: node_id.clone(),
+                    runner: step.run.clone(),
+                    input: params.clone(),
+                    output: Some(output_str),
+                    error: None,
+                    attempt,
+                    input_type: None,
+                    output_type: None,
+                    validation: cache_status,
+                });
                 break;
             } else {
                 last_error = Some(output_str.clone());
-                on_event(StepEvent { step: step_idx, step_id: node_id.clone(), runner: step.run.clone(), status: "error".to_string(), attempt, message: Some("attempt failed".to_string()), output: None, error: Some(output_str.clone()) });
+                on_event(StepEvent {
+                    step: step_idx,
+                    step_id: node_id.clone(),
+                    runner: step.run.clone(),
+                    status: "error".to_string(),
+                    attempt,
+                    message: Some("attempt failed".to_string()),
+                    output: None,
+                    error: Some(output_str.clone()),
+                });
                 if attempt < max_attempts {
                     let retry_delay = step.retry_delay.unwrap_or(1000);
                     thread::sleep(Duration::from_millis(retry_delay));
-                    on_event(StepEvent { step: step_idx, step_id: node_id.clone(), runner: step.run.clone(), status: "running".to_string(), attempt: attempt + 1, message: Some("retrying".to_string()), output: None, error: None });
+                    on_event(StepEvent {
+                        step: step_idx,
+                        step_id: node_id.clone(),
+                        runner: step.run.clone(),
+                        status: "running".to_string(),
+                        attempt: attempt + 1,
+                        message: Some("retrying".to_string()),
+                        output: None,
+                        error: None,
+                    });
                 }
             }
         }
 
         if let Some(error) = last_error {
-            logs.push(StepLog { step: step_idx, runner: step.run.clone(), input: params.clone(), output: None, error: Some(error), attempt: max_attempts, input_type: None, output_type: None, validation: None });
+            logs.push(StepLog {
+                step: step_idx,
+                step_id: node_id.clone(),
+                runner: step.run.clone(),
+                input: params.clone(),
+                output: None,
+                error: Some(error),
+                attempt: max_attempts,
+                input_type: None,
+                output_type: None,
+                validation: None,
+            });
         }
     }
 
@@ -556,7 +683,10 @@ where
 }
 
 // Parallel execution by levels (nodes on same level run concurrently)
-pub fn run_workflow_yaml_parallel_with_callback<F>(path: &str, on_event: F) -> Result<Vec<StepLog>, String>
+pub fn run_workflow_yaml_parallel_with_callback<F>(
+    path: &str,
+    on_event: F,
+) -> Result<Vec<StepLog>, String>
 where
     F: FnMut(StepEvent) + Send,
 {
@@ -590,26 +720,26 @@ fn build_plugin_input(params: &serde_yaml::Value) -> PluginInput {
         if let Some(input_val) = mapping.get("input") {
             if let Some(input_str) = input_val.as_str() {
                 let c_string = CString::new(input_str).unwrap();
-                return PluginInput { text: c_string.into_raw() };
+                return PluginInput {
+                    text: c_string.into_raw(),
+                };
             }
         }
     }
-    
+
     // Fallback: serialize the entire params object
     let text = serde_yaml::to_string(params).unwrap_or_default();
     let c_string = CString::new(text).unwrap();
-    PluginInput { text: c_string.into_raw() }
+    PluginInput {
+        text: c_string.into_raw(),
+    }
 }
 
 // Evaluate a step condition against execution context
-pub fn evaluate_condition(
-    condition: &StepCondition,
-    step_logs: &[StepLog],
-    step_id: &str,
-) -> bool {
+pub fn evaluate_condition(condition: &StepCondition, step_logs: &[StepLog], step_id: &str) -> bool {
     match &condition.condition_type {
         ConditionType::OutputContains => {
-            if let Some(log) = step_logs.iter().find(|l| l.runner == step_id) {
+            if let Some(log) = step_logs.iter().find(|l| l.step_id == step_id) {
                 if let Some(output) = &log.output {
                     match condition.operator {
                         ConditionOperator::Contains => output.contains(&condition.value),
@@ -624,7 +754,7 @@ pub fn evaluate_condition(
             }
         }
         ConditionType::OutputEquals => {
-            if let Some(log) = step_logs.iter().find(|l| l.runner == step_id) {
+            if let Some(log) = step_logs.iter().find(|l| l.step_id == step_id) {
                 if let Some(output) = &log.output {
                     match condition.operator {
                         ConditionOperator::Equals => output == &condition.value,
@@ -639,8 +769,12 @@ pub fn evaluate_condition(
             }
         }
         ConditionType::StatusEquals => {
-            if let Some(log) = step_logs.iter().find(|l| l.runner == step_id) {
-                let status = if log.error.is_some() { "error" } else { "success" };
+            if let Some(log) = step_logs.iter().find(|l| l.step_id == step_id) {
+                let status = if log.error.is_some() {
+                    "error"
+                } else {
+                    "success"
+                };
                 match condition.operator {
                     ConditionOperator::Equals => status == condition.value,
                     ConditionOperator::NotEquals => status != condition.value,
@@ -651,7 +785,7 @@ pub fn evaluate_condition(
             }
         }
         ConditionType::ErrorContains => {
-            if let Some(log) = step_logs.iter().find(|l| l.runner == step_id) {
+            if let Some(log) = step_logs.iter().find(|l| l.step_id == step_id) {
                 if let Some(error) = &log.error {
                     match condition.operator {
                         ConditionOperator::Contains => error.contains(&condition.value),
@@ -668,7 +802,11 @@ pub fn evaluate_condition(
         ConditionType::PreviousStepStatus => {
             // Evaluate based on previous step in execution order
             if let Some(prev_log) = step_logs.last() {
-                let status = if prev_log.error.is_some() { "error" } else { "success" };
+                let status = if prev_log.error.is_some() {
+                    "error"
+                } else {
+                    "success"
+                };
                 match condition.operator {
                     ConditionOperator::Equals => status == condition.value,
                     ConditionOperator::NotEquals => status != condition.value,
@@ -706,21 +844,19 @@ mod tests {
 
     #[test]
     fn test_build_dag_simple() {
-        let steps = vec![
-            WorkflowStep {
-                run: "Echo".to_string(),
-                params: serde_yaml::from_str("input: 'hello'").unwrap(),
-                retries: None,
-                retry_delay: None,
-                cache_key: None,
-                input_from: None,
-                depends_on: None,
-                condition: None,
-                on_success: None,
-                on_failure: None,
-            }
-        ];
-        
+        let steps = vec![WorkflowStep {
+            run: "Echo".to_string(),
+            params: serde_yaml::from_str("input: 'hello'").unwrap(),
+            retries: None,
+            retry_delay: None,
+            cache_key: None,
+            input_from: None,
+            depends_on: None,
+            condition: None,
+            on_success: None,
+            on_failure: None,
+        }];
+
         let dag = build_dag(&steps).unwrap();
         assert_eq!(dag.len(), 1);
         assert_eq!(dag[0].id, "step1");
@@ -753,9 +889,9 @@ mod tests {
                 condition: None,
                 on_success: None,
                 on_failure: None,
-            }
+            },
         ];
-        
+
         let dag = build_dag(&steps).unwrap();
         assert_eq!(dag.len(), 2);
         assert_eq!(dag[1].parents.len(), 1);
@@ -788,9 +924,9 @@ mod tests {
                 condition: None,
                 on_success: None,
                 on_failure: None,
-            }
+            },
         ];
-        
+
         let dag = build_dag(&steps).unwrap();
         let order = topo_sort(&dag).unwrap();
         assert_eq!(order, vec!["step1", "step2"]);
@@ -822,9 +958,9 @@ mod tests {
                 condition: None,
                 on_success: None,
                 on_failure: None,
-            }
+            },
         ];
-        
+
         let dag = build_dag(&steps).unwrap();
         let result = topo_sort(&dag);
         assert!(result.is_err());
@@ -835,7 +971,7 @@ mod tests {
     fn test_substitute_vars() {
         let mut outputs = HashMap::new();
         outputs.insert("step1".to_string(), "hello world".to_string());
-        
+
         let result = substitute_vars("Input: ${step1}", &outputs);
         assert_eq!(result, "Input: hello world");
     }
