@@ -683,8 +683,8 @@ create_msi_package() {
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLFOLDER" Name="LAO">
           <Component Id="MainExecutable" Guid="*">
-            <File Id="lao-cli.exe" Source="target/release/lao-cli.exe" KeyPath="yes" />
-            <File Id="lao-ui.exe" Source="target/release/lao-ui.exe" />
+            <File Id="LaoCliExe" Source="target/release/lao-cli.exe" KeyPath="yes" />
+            <File Id="LaoUiExe" Source="target/release/lao-ui.exe" />
           </Component>
           <Directory Id="PluginsFolder" Name="plugins">
             <Component Id="Plugins" Guid="*">
