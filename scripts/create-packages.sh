@@ -688,9 +688,9 @@ create_msi_package() {
           </Component>
           <Directory Id="PluginsFolder" Name="plugins">
             <Component Id="Plugins" Guid="*">
-              <File Id="Plugin1" Source="plugins/libecho_plugin.dll" />
-              <File Id="Plugin2" Source="plugins/libollama_plugin.dll" />
-              <File Id="Plugin3" Source="plugins/libwhisper_plugin.dll" />
+              <File Id="Plugin1" Source="plugins/echo_plugin.dll" />
+              <File Id="Plugin2" Source="plugins/ollama_plugin.dll" />
+              <File Id="Plugin3" Source="plugins/whisper_plugin.dll" />
             </Component>
           </Directory>
         </Directory>
