@@ -669,7 +669,7 @@ create_msi_package() {
     cat > "$msi_dir/lao.wxs" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="LAO Orchestrator" Language="1033" Version="$VERSION" Manufacturer="Jake Abendroth" UpgradeCode="PUT-GUID-HERE">
+  <Product Id="*" Name="LAO Orchestrator" Language="1033" Version="$VERSION" Manufacturer="Jake Abendroth" UpgradeCode="581ACBB9-CC79-4763-BD13-ED19A5CBB960">
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
     
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
