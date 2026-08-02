@@ -19,6 +19,12 @@
 ![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)
 ![Made with Rust](https://img.shields.io/badge/Made%20with-Rust-orange?logo=rust)
 
+> **Note:** This project is feature-complete but no longer actively developed. It was
+> built to distribute inference load across several machines (a mix of CUDA desktops
+> and an M4 Pro), but in practice the M4's 24 GB unified memory outperforms everything
+> else I own — so there's nothing worth routing to. The code and ideas are solid; I
+> just no longer have the hardware problem it was designed to solve.
+
 pig is a hardware-aware inference router for your own GPU machines. It schedules
 generation requests across your workers, manages model loading, tracks throughput and
 latency, and exposes an OpenAI-compatible API at the coordinator.
