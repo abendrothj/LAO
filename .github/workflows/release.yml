@@ -26,7 +26,7 @@ jobs:
             archive: tar.gz
 
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
@@ -54,6 +54,6 @@ jobs:
           tar czf "lao-${VERSION}-${{ matrix.target }}.tar.gz" "${STAGING}"
 
       - name: Upload release asset
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           files: lao-*-${{ matrix.target }}.*
